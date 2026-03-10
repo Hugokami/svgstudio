@@ -5638,24 +5638,36 @@
         });
 
         // ═══ GSAP TRANSLATION ENGINE (Phase 3) ═══
-        function translateSMILToGSAP(svg) {
+                function translateSMILToGSAP(svg) {
             if (!svg) return;
 
             const anims = svg.querySelectorAll('animate, animateTransform, animateMotion');
             anims.forEach(anim => {
-                const targetId = anim.parentNode.id;
-                const target = targetId ? svg.getElementById(targetId) : anim.parentNode;
-                if (!target) return;
+                const animHref = anim.getAttribute('href') || anim.getAttribute('xlink:href');
+                let target;
+                if (animHref && animHref.startsWith('#')) {
+                    target = svg.getElementById(animHref.substring(1));
+                } else {
+                    const targetId = anim.parentNode.id;
+                    target = targetId ? svg.getElementById(targetId) : anim.parentNode;
+                }
+
+                if (!target || target === svg) return;
 
                 const attr = anim.getAttribute('attributeName');
                 const durAttr = anim.getAttribute('dur');
-                const dur = durAttr ? (durAttr.endsWith('ms') ? parseFloat(durAttr) / 1000 : parseFloat(durAttr)) : 5;
+                const dur = (durAttr && !isNaN(parseFloat(durAttr))) ? 
+                            (durAttr.endsWith('ms') ? parseFloat(durAttr)/1000 : parseFloat(durAttr)) : 5;
+                const beginAttr = anim.getAttribute('begin') || "0";
+                const delay = (!isNaN(parseFloat(beginAttr))) ? 
+                             (beginAttr.endsWith('ms') ? parseFloat(beginAttr)/1000 : parseFloat(beginAttr)) : 0;
+                
                 const from = anim.getAttribute('from');
                 const to = anim.getAttribute('to');
                 const values = anim.getAttribute('values');
                 const repeatCount = anim.getAttribute('repeatCount');
-                const type = anim.getAttribute('type'); // for animateTransform
-                const path = anim.getAttribute('path'); // for animateMotion
+                const type = anim.getAttribute('type'); 
+                const path = anim.getAttribute('path');
 
                 let gsapProps = {
                     duration: dur,
@@ -5669,7 +5681,8 @@
                 if (anim.tagName === 'animate') {
                     if (values) {
                         const valArray = values.split(';').map(v => v.trim());
-                        tween = gsap.to(target, { ...gsapProps, [attr]: valArray });
+                        const keyframes = valArray.map(v => ({ [attr]: v }));
+                        tween = gsap.to(target, { ...gsapProps, keyframes: keyframes });
                     } else if (from !== null && to !== null) {
                         tween = gsap.fromTo(target, { [attr]: from }, { ...gsapProps, [attr]: to });
                     }
@@ -5679,14 +5692,23 @@
                     const transformType = attr === 'transform' ? type : 'rotate';
                     if (values) {
                         const valArray = values.split(';').map(v => v.trim());
-                        // Simple logic for values in transforms
-                        tween = gsap.to(target, { ...gsapProps, [transformType]: valArray[valArray.length - 1] });
+                        const keyframes = valArray.map(v => {
+                            const pts = v.split(/[\s,]+/).map(parseFloat);
+                            if (transformType === 'translate') return { x: pts[0], y: pts[1] || 0 };
+                            if (transformType === 'scale') return { scaleX: pts[0], scaleY: pts[1] !== undefined ? pts[1] : pts[0] };
+                            if (transformType === 'rotate') return { rotate: pts[0] };
+                            return {};
+                        });
+                        tween = gsap.to(target, { ...gsapProps, keyframes: keyframes });
                     } else if (from !== null && to !== null) {
-                        const parseTransform = (val) => parseFloat(val.split(' ')[0]);
-                        tween = gsap.fromTo(target, { [transformType]: parseTransform(from) }, { ...gsapProps, [transformType]: parseTransform(to) });
+                        const f = from.split(/[\s,]+/).map(parseFloat);
+                        const t = to.split(/[\s,]+/).map(parseFloat);
+                        if (transformType === 'translate') tween = gsap.fromTo(target, { x: f[0], y: f[1] || 0 }, { ...gsapProps, x: t[0], y: t[1] || 0 });
+                        else if (transformType === 'scale') tween = gsap.fromTo(target, { scaleX: f[0], scaleY: f[1] !== undefined ? f[1] : f[0] }, { ...gsapProps, scaleX: t[0], scaleY: t[1] !== undefined ? t[1] : t[0] });
+                        else if (transformType === 'rotate') tween = gsap.fromTo(target, { rotate: f[0] }, { ...gsapProps, rotate: t[0] });
                     }
                 }
-                // Handle animateMotion (Phase 5 addition)
+                // Handle animateMotion
                 else if (anim.tagName === 'animateMotion') {
                     let motionSource = path;
                     const mpath = anim.querySelector('mpath');
@@ -5711,17 +5733,13 @@
                     }
                 }
 
-                // Add to masterTimeline
                 if (tween) {
-                    masterTimeline.add(tween, 0);
+                    masterTimeline.add(tween, delay);
                 }
 
-                // Cleanup: Strip SMIL to prevent double rendering
                 anim.remove();
             });
-        }
-
-        // Auto-rebuild timeline when SVG changes
+        }\n\n        // Auto-rebuild timeline when SVG changes
         function rebuildMasterTimeline() {
             const svg = svgTransformWrapper.querySelector('svg');
             if (!svg) return;
