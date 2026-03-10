@@ -1101,7 +1101,23 @@
                     </div>
                     <div class="ecp-body">
                         <!-- Standard Properties (Hidden for text editing focus if desired, but let's keep them) -->
-                        <div class="ecp-section-title">Properties</div>
+
+                        <div class="ecp-section-title" style="margin-top: 8px;">Align & Distribute</div>
+                        <div class="ecp-row" style="justify-content: space-between; gap: 2px;">
+                            <button id="ecpAlignLeftBtn" class="ecp-btn" style="flex:1;" title="Align Left">⇤</button>
+                            <button id="ecpAlignCenterBtn" class="ecp-btn" style="flex:1;" title="Align Center">⇹</button>
+                            <button id="ecpAlignRightBtn" class="ecp-btn" style="flex:1;" title="Align Right">⇥</button>
+                            <div style="width: 4px;"></div>
+                            <button id="ecpAlignTopBtn" class="ecp-btn" style="flex:1;" title="Align Top">⇡</button>
+                            <button id="ecpAlignMiddleBtn" class="ecp-btn" style="flex:1;" title="Align Middle">⇕</button>
+                            <button id="ecpAlignBottomBtn" class="ecp-btn" style="flex:1;" title="Align Bottom">⇣</button>
+                        </div>
+                        <div class="ecp-row" style="justify-content: space-between; gap: 2px; margin-top: 4px;">
+                            <button id="ecpDistHorizBtn" class="ecp-btn" style="flex:1;" title="Distribute Horizontally">↔ Dist H</button>
+                            <button id="ecpDistVertBtn" class="ecp-btn" style="flex:1;" title="Distribute Vertically">↕ Dist V</button>
+                        </div>
+                        <div class="ecp-section-title" style="margin-top: 8px;">Properties</div>
+
                         <div class="ecp-row">
                             <span class="ecp-label">Opacity</span>
                             <input type="range" id="ecpOpacity" class="ecp-input" min="0" max="1" step="0.05" value="1">
@@ -1930,16 +1946,27 @@
 
             // Check if there's a selected group we should apply stagger to
             const applyStagger = parseFloat(stagger) > 0;
-            const selectedElementId = selectedElement ? selectedElement.id : null;
             let staggerTargets = [];
 
-            // If a group is selected and stagger is requested, we animate its children
-            if (applyStagger && selectedElementId && selectedElement.tagName.toLowerCase() === 'g') {
-                const groupInDoc = doc.getElementById(selectedElementId);
+            // Allow staggering if multiple elements are selected, or if a single group is selected
+            if (selectedElements.length > 1) {
+                // Stagger across multi-selected elements
+                // We need to map the selected elements from the DOM to the parsed doc
+                // The easiest way is to use paths or rely on IDs if they exist. Let's just rely on IDs,
+                // or if they don't have IDs, we assign temporary ones.
+                // For safety in this environment, if multi-selected, let's just stagger them directly
+                selectedElements.forEach(el => {
+                    if (!el.id) el.id = 'stagger-target-' + Math.random().toString(36).substr(2, 9);
+                    const elInDoc = doc.getElementById(el.id);
+                    if (elInDoc) staggerTargets.push(elInDoc);
+                });
+            } else if (selectedElements.length === 1 && selectedElements[0].tagName.toLowerCase() === 'g') {
+                // Single group selected: stagger its children
+                const groupInDoc = doc.getElementById(selectedElements[0].id);
                 if (groupInDoc) {
                     staggerTargets = Array.from(groupInDoc.children).filter(c => c.tagName !== 'defs' && c.tagName !== 'style' && c.tagName !== 'title' && c.tagName !== 'desc');
                 }
-            } else if (applyStagger && !selectedElementId) {
+            } else if (applyStagger && selectedElements.length === 0) {
                 // If stagger is requested but nothing is selected, stagger all root elements
                 staggerTargets = Array.from(svg.children).filter(c => c.tagName !== 'defs' && c.tagName !== 'style' && c.tagName !== 'metadata' && c.tagName !== 'title' && c.tagName !== 'desc');
             }
@@ -1951,15 +1978,21 @@
                     return null;
                 }
 
-                // If a specific element is selected, wrap just that element
-                if (selectedElementId) {
-                    const elInDoc = doc.getElementById(selectedElementId);
-                    if (elInDoc) {
-                        let g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
-                        elInDoc.parentNode.insertBefore(g, elInDoc);
-                        g.appendChild(elInDoc);
-                        // Transfer ID to the wrapper so it remains selected conceptually?
-                        // Actually, it's safer to just wrap it and animate the wrapper.
+                // If specific element(s) are selected (but no stagger), wrap them all together
+                if (selectedElements.length > 0) {
+                    let g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
+                    // We need to find them in the parsed doc.
+                    // If multiple, wrap them all. If single, just wrap it.
+                    let elementsToWrap = [];
+                    selectedElements.forEach(el => {
+                        if (!el.id) el.id = 'wrap-target-' + Math.random().toString(36).substr(2, 9);
+                        const elInDoc = doc.getElementById(el.id);
+                        if (elInDoc) elementsToWrap.push(elInDoc);
+                    });
+
+                    if (elementsToWrap.length > 0) {
+                        elementsToWrap[0].parentNode.insertBefore(g, elementsToWrap[0]);
+                        elementsToWrap.forEach(el => g.appendChild(el));
                         return g;
                     }
                 }
@@ -5058,14 +5091,12 @@
         const ecpLetterSpacing = document.getElementById('ecpLetterSpacing');
         const ecpTextWarp = document.getElementById('ecpTextWarp');
 
-        let selectedElement = null;
+        let selectedElements = [];
         const selectableTagNames = new Set(['path', 'circle', 'rect', 'polygon', 'polyline', 'ellipse', 'line', 'text', 'textpath', 'tspan', 'g', 'use', 'image', 'clipPath']);
 
         function deselectElement() {
-            if (selectedElement) {
-                selectedElement.classList.remove('el-selected');
-                selectedElement = null;
-            }
+            selectedElements.forEach(el => el.classList.remove('el-selected'));
+            selectedElements = [];
             elControlPanel.classList.remove('open');
             ecpPathSection.style.display = 'none';
             if (isPathEditing) {
@@ -5073,67 +5104,107 @@
             }
         }
 
-        function selectElement(el) {
-            deselectElement();
-            selectedElement = el;
-            el.classList.add('el-selected');
+        function selectElement(el, multi = false) {
+            if (!multi) {
+                deselectElement();
+            }
+            if (!selectedElements.includes(el)) {
+                selectedElements.push(el);
+                el.classList.add('el-selected');
+            }
+
+            updateECP();
+        }
+
+        function updateECP() {
+            if (selectedElements.length === 0) {
+                elControlPanel.classList.remove('open');
+                return;
+            }
             elControlPanel.classList.add('open');
 
+            const firstEl = selectedElements[0];
+            const isMulti = selectedElements.length > 1;
+
             // Populate title
-            const tag = el.tagName.toLowerCase();
-            const id = el.getAttribute('id');
-            const cls = el.getAttribute('class')?.replace('el-selected', '').replace('injected-asset', '').trim();
-            ecpTitle.textContent = `▸ <${tag}>${id ? ' #' + id : ''}${cls ? ' .' + cls : ''}`;
+            if (isMulti) {
+                ecpTitle.textContent = `▸ MIXED SELECTION (${selectedElements.length})`;
+            } else {
+                const tag = firstEl.tagName.toLowerCase();
+                const id = firstEl.getAttribute('id');
+                const cls = firstEl.getAttribute('class')?.replace('el-selected', '').replace('injected-asset', '').trim();
+                ecpTitle.textContent = `▸ <${tag}>${id ? ' #' + id : ''}${cls ? ' .' + cls : ''}`;
+            }
+
+            // Helper to get common property or null if mixed
+            function getCommonProp(attr, styleProp) {
+                const firstVal = firstEl.getAttribute(attr) || firstEl.style[styleProp] || '';
+                for (let i = 1; i < selectedElements.length; i++) {
+                    const val = selectedElements[i].getAttribute(attr) || selectedElements[i].style[styleProp] || '';
+                    if (val !== firstVal) return null;
+                }
+                return firstVal;
+            }
 
             // Populate opacity
-            const op = el.getAttribute('opacity') || el.style.opacity || '1';
-            ecpOpacity.value = parseFloat(op);
-            ecpOpacityVal.textContent = parseFloat(op).toFixed(2);
+            const op = getCommonProp('opacity', 'opacity');
+            ecpOpacity.value = op !== null ? parseFloat(op || '1') : 1;
+            ecpOpacityVal.textContent = op !== null ? parseFloat(op || '1').toFixed(2) : 'MIXED';
 
             // Populate fill/stroke
-            const fill = el.getAttribute('fill') || '';
-            const stroke = el.getAttribute('stroke') || '';
-            const sw = el.getAttribute('stroke-width') || '';
-            ecpFill.value = fill && fill !== 'none' && fill.startsWith('#') ? normalizeToHex(fill) : '#000000';
-            ecpStroke.value = stroke && stroke !== 'none' && stroke.startsWith('#') ? normalizeToHex(stroke) : '#E5FF00';
-            ecpStrokeWidth.value = sw || '1';
+            const fill = getCommonProp('fill', 'fill');
+            const stroke = getCommonProp('stroke', 'stroke');
+            const sw = getCommonProp('stroke-width', 'strokeWidth');
 
-            // Text Controls Visibility & Population
-            if (tag === 'text' || tag === 'textpath') {
+            // We just use the first element's colors as a base if mixed, to avoid breaking color inputs
+            const safeFill = fill || firstEl.getAttribute('fill') || '';
+            const safeStroke = stroke || firstEl.getAttribute('stroke') || '';
+
+            ecpFill.value = safeFill && safeFill !== 'none' && safeFill.startsWith('#') ? normalizeToHex(safeFill) : '#000000';
+            ecpStroke.value = safeStroke && safeStroke !== 'none' && safeStroke.startsWith('#') ? normalizeToHex(safeStroke) : '#E5FF00';
+            ecpStrokeWidth.value = sw !== null ? (sw || '1') : '';
+            if (sw === null) ecpStrokeWidth.placeholder = 'MIX'; else ecpStrokeWidth.placeholder = '';
+
+            // Text Controls Visibility
+            const allText = selectedElements.every(el => el.tagName.toLowerCase() === 'text' || el.tagName.toLowerCase() === 'textpath');
+            if (allText) {
                 ecpTextSection.style.display = 'block';
-                // Handle standard text and textPath
-                const isTextPath = tag === 'textpath';
-                const textNodes = Array.from(el.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
-                ecpTextContent.value = textNodes.map(n => n.textContent).join('').trim();
+                if (!isMulti) {
+                    const tag = firstEl.tagName.toLowerCase();
+                    const isTextPath = tag === 'textpath';
+                    const textNodes = Array.from(firstEl.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
+                    ecpTextContent.value = textNodes.map(n => n.textContent).join('').trim();
 
-                ecpFontFamily.value = el.getAttribute('font-family') || 'sans-serif';
-                ecpFontSize.value = parseInt(el.getAttribute('font-size') || 24, 10);
-                ecpFontWeight.value = el.getAttribute('font-weight') || 'normal';
-                ecpLetterSpacing.value = parseInt(el.getAttribute('letter-spacing') || 0, 10);
+                    ecpFontFamily.value = firstEl.getAttribute('font-family') || 'sans-serif';
+                    ecpFontSize.value = parseInt(firstEl.getAttribute('font-size') || 24, 10);
+                    ecpFontWeight.value = firstEl.getAttribute('font-weight') || 'normal';
+                    ecpLetterSpacing.value = parseInt(firstEl.getAttribute('letter-spacing') || 0, 10);
 
-                // Determine text warp status (simplified parsing)
-                if (isTextPath) {
-                    const href = el.getAttribute('href') || el.getAttribute('xlink:href');
-                    if (href === '#textWarpCircle') ecpTextWarp.value = 'circle';
-                    else if (href === '#textWarpWave') ecpTextWarp.value = 'wave';
-                    else if (href === '#textWarpArch') ecpTextWarp.value = 'arch';
-                    else ecpTextWarp.value = 'none';
+                    if (isTextPath) {
+                        const href = firstEl.getAttribute('href') || firstEl.getAttribute('xlink:href');
+                        if (href === '#textWarpCircle') ecpTextWarp.value = 'circle';
+                        else if (href === '#textWarpWave') ecpTextWarp.value = 'wave';
+                        else if (href === '#textWarpArch') ecpTextWarp.value = 'arch';
+                        else ecpTextWarp.value = 'none';
+                    } else {
+                        ecpTextWarp.value = 'none';
+                    }
                 } else {
-                    ecpTextWarp.value = 'none';
+                    ecpTextContent.value = 'Multiple Texts Selected';
                 }
             } else {
                 ecpTextSection.style.display = 'none';
             }
 
             // Path Controls
-            if (tag === 'path') {
+            if (!isMulti && firstEl.tagName.toLowerCase() === 'path') {
                 ecpPathSection.style.display = 'block';
             } else {
                 ecpPathSection.style.display = 'none';
             }
 
-            // Populate animation list
-            populateAnimList(el);
+            // Populate animation list (only for first element for now to avoid massive UI clutter)
+            populateAnimList(firstEl);
         }
 
         function populateAnimList(el) {
@@ -5196,66 +5267,226 @@
             }
         }
 
+
+        // --- Alignment & Distribution Logic ---
+        function getBBoxSafe(el) {
+            try { return el.getBBox(); } catch(e) { return {x:0, y:0, width:0, height:0}; }
+        }
+
+        function setTransformTranslate(el, dx, dy) {
+            // Because getBBox() returns pre-transform bounds, but we are appending to the transform,
+            // we actually only want to add the delta to the *existing* translate, not keep adding it.
+            // Actually, an even safer way is to read the current translate, add the delta, but we must
+            // make sure we don't double-count.
+            // If we use getBoundingClientRect, we get screen coords, which is safer for calculating exact deltas.
+
+            const currentTransform = el.getAttribute('transform') || '';
+            let hasTranslate = false;
+            let newTransform = currentTransform.replace(/translate\(([^)]+)\)/, (match, args) => {
+                hasTranslate = true;
+                const parts = args.split(/[ ,]+/).map(parseFloat);
+                const currentX = parts[0] || 0;
+                const currentY = parts[1] || 0;
+                return `translate(${currentX + dx}, ${currentY + dy})`;
+            });
+
+            if (!hasTranslate) {
+                newTransform = `translate(${dx}, ${dy}) ` + currentTransform;
+            }
+
+            el.setAttribute('transform', newTransform.trim());
+        }
+
+        // Use getBoundingClientRect so it accounts for transforms
+        function getScreenBox(el) {
+            const rect = el.getBoundingClientRect();
+            // We need to convert screen space delta back to SVG view space delta
+            const svg = svgTransformWrapper.querySelector('svg');
+            const pt = svg.createSVGPoint();
+            pt.x = rect.left; pt.y = rect.top;
+            const ctm = svg.getScreenCTM().inverse();
+            const svgTopLeft = pt.matrixTransform(ctm);
+
+            pt.x = rect.right; pt.y = rect.bottom;
+            const svgBottomRight = pt.matrixTransform(ctm);
+
+            return {
+                x: svgTopLeft.x,
+                y: svgTopLeft.y,
+                width: svgBottomRight.x - svgTopLeft.x,
+                height: svgBottomRight.y - svgTopLeft.y
+            };
+        }
+
+        document.getElementById('ecpAlignLeftBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            const minX = Math.min(...boxes.map(b => b.box.x));
+            boxes.forEach(b => {
+                const dx = minX - b.box.x;
+                if(dx !== 0) setTransformTranslate(b.el, dx, 0);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpAlignCenterBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            // Find center of bounding box of all elements
+            const minX = Math.min(...boxes.map(b => b.box.x));
+            const maxX = Math.max(...boxes.map(b => b.box.x + b.box.width));
+            const centerX = minX + (maxX - minX) / 2;
+
+            boxes.forEach(b => {
+                const elCenter = b.box.x + b.box.width / 2;
+                const dx = centerX - elCenter;
+                if(dx !== 0) setTransformTranslate(b.el, dx, 0);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpAlignRightBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            const maxX = Math.max(...boxes.map(b => b.box.x + b.box.width));
+            boxes.forEach(b => {
+                const dx = maxX - (b.box.x + b.box.width);
+                if(dx !== 0) setTransformTranslate(b.el, dx, 0);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpAlignTopBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            const minY = Math.min(...boxes.map(b => b.box.y));
+            boxes.forEach(b => {
+                const dy = minY - b.box.y;
+                if(dy !== 0) setTransformTranslate(b.el, 0, dy);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpAlignMiddleBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            const minY = Math.min(...boxes.map(b => b.box.y));
+            const maxY = Math.max(...boxes.map(b => b.box.y + b.box.height));
+            const centerY = minY + (maxY - minY) / 2;
+
+            boxes.forEach(b => {
+                const elCenter = b.box.y + b.box.height / 2;
+                const dy = centerY - elCenter;
+                if(dy !== 0) setTransformTranslate(b.el, 0, dy);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpAlignBottomBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            const maxY = Math.max(...boxes.map(b => b.box.y + b.box.height));
+            boxes.forEach(b => {
+                const dy = maxY - (b.box.y + b.box.height);
+                if(dy !== 0) setTransformTranslate(b.el, 0, dy);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpDistHorizBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 3) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)})).sort((a,b) => a.box.x - b.box.x);
+            const minX = boxes[0].box.x;
+            const maxX = boxes[boxes.length-1].box.x;
+            const step = (maxX - minX) / (boxes.length - 1);
+
+            boxes.forEach((b, i) => {
+                if (i === 0 || i === boxes.length - 1) return; // Don't move end elements
+                const targetX = minX + (step * i);
+                const dx = targetX - b.box.x;
+                if(dx !== 0) setTransformTranslate(b.el, dx, 0);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpDistVertBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 3) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)})).sort((a,b) => a.box.y - b.box.y);
+            const minY = boxes[0].box.y;
+            const maxY = boxes[boxes.length-1].box.y;
+            const step = (maxY - minY) / (boxes.length - 1);
+
+            boxes.forEach((b, i) => {
+                if (i === 0 || i === boxes.length - 1) return; // Don't move end elements
+                const targetY = minY + (step * i);
+                const dy = targetY - b.box.y;
+                if(dy !== 0) setTransformTranslate(b.el, 0, dy);
+            });
+            updateEditorFromPreview();
+        });
+
+
         // --- ECP Event Listeners ---
         ecpCloseBtn.addEventListener('click', deselectElement);
 
         ecpOpacity.addEventListener('input', () => {
-            if (!selectedElement) return;
+            if (selectedElements.length === 0) return;
             const val = ecpOpacity.value;
             ecpOpacityVal.textContent = parseFloat(val).toFixed(2);
-            selectedElement.setAttribute('opacity', val);
+            selectedElements.forEach(el => el.setAttribute('opacity', val));
         });
         ecpOpacity.addEventListener('change', () => {
-            if (!selectedElement) return;
+            if (selectedElements.length === 0) return;
             updateEditorFromPreview();
         });
 
         ecpFill.addEventListener('change', () => {
-            if (!selectedElement) return;
-            selectedElement.setAttribute('fill', ecpFill.value);
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => el.setAttribute('fill', ecpFill.value));
             updateEditorFromPreview();
             showToast(`Fill → ${ecpFill.value}`);
         });
 
         ecpStroke.addEventListener('change', () => {
-            if (!selectedElement) return;
-            selectedElement.setAttribute('stroke', ecpStroke.value);
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => el.setAttribute('stroke', ecpStroke.value));
             updateEditorFromPreview();
             showToast(`Stroke → ${ecpStroke.value}`);
         });
 
         ecpStrokeWidth.addEventListener('change', () => {
-            if (!selectedElement) return;
-            selectedElement.setAttribute('stroke-width', ecpStrokeWidth.value);
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => el.setAttribute('stroke-width', ecpStrokeWidth.value));
             updateEditorFromPreview();
         });
 
         // --- Text Control Event Listeners ---
         ecpTextContent.addEventListener('input', (e) => {
-            if (!selectedElement) return;
-
-            if (selectedElement.tagName.toLowerCase() === 'textpath' || selectedElement.tagName.toLowerCase() === 'tspan') {
-                selectedElement.textContent = e.target.value;
-            } else {
-                const innerTp = selectedElement.querySelector('textPath, tspan');
-                if (innerTp) {
-                    innerTp.textContent = e.target.value;
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => {
+                if (el.tagName.toLowerCase() === 'textpath' || el.tagName.toLowerCase() === 'tspan') {
+                    el.textContent = e.target.value;
                 } else {
-                    selectedElement.textContent = e.target.value;
+                    const innerTp = el.querySelector('textPath, tspan');
+                    if (innerTp) {
+                        innerTp.textContent = e.target.value;
+                    } else {
+                        el.textContent = e.target.value;
+                    }
                 }
-            }
+            });
         });
         ecpTextContent.addEventListener('change', () => {
-            if (!selectedElement) return;
+            if (selectedElements.length === 0) return;
             updateEditorFromPreview();
         });
 
         ['ecpFontFamily', 'ecpFontSize', 'ecpFontWeight', 'ecpLetterSpacing'].forEach(id => {
             document.getElementById(id).addEventListener('change', (e) => {
-                if (!selectedElement) return;
+                if (selectedElements.length === 0) return;
                 const attr = e.target.id.replace('ecp', '').replace(/([A-Z])/g, '-$1').toLowerCase().substring(1);
                 const val = e.target.value + (e.target.id === 'ecpLetterSpacing' ? 'px' : '');
-                selectedElement.setAttribute(attr, val);
+                selectedElements.forEach(el => el.setAttribute(attr, val));
                 updateEditorFromPreview();
             });
         });
@@ -5289,26 +5520,26 @@
         }
 
         ecpTextWarp.addEventListener('change', () => {
-            if (!selectedElement) return;
+            if (selectedElements.length === 0) return;
+            const el = selectedElements[0]; // Only apply warp to first selected for now
             const warpType = ecpTextWarp.value;
             const textContent = ecpTextContent.value;
 
             if (warpType === 'none') {
-                if (selectedElement.tagName.toLowerCase() === 'textpath') {
-                    // It's a textPath inside a text element
-                    const parentText = selectedElement.parentNode;
+                if (el.tagName.toLowerCase() === 'textpath') {
+                    const parentText = el.parentNode;
                     parentText.innerHTML = textContent;
-                    selectElement(parentText); // re-select the text element
-                } else if (selectedElement.tagName.toLowerCase() === 'text') {
-                    selectedElement.innerHTML = textContent;
+                    selectElement(parentText, false);
+                } else if (el.tagName.toLowerCase() === 'text') {
+                    el.innerHTML = textContent;
                 }
             } else {
                 ensureTextWarpDefs();
                 const pathId = warpType === 'circle' ? '#textWarpCircle' : warpType === 'wave' ? '#textWarpWave' : '#textWarpArch';
 
-                let targetTextEl = selectedElement;
-                if (selectedElement.tagName.toLowerCase() === 'textpath') {
-                    targetTextEl = selectedElement.parentNode;
+                let targetTextEl = el;
+                if (el.tagName.toLowerCase() === 'textpath') {
+                    targetTextEl = el.parentNode;
                 }
 
                 targetTextEl.innerHTML = '';
@@ -5319,37 +5550,36 @@
                 tp.textContent = textContent;
                 targetTextEl.appendChild(tp);
 
-                selectElement(tp); // select the new textPath
+                selectElement(tp, false);
             }
             updateEditorFromPreview();
         });
 
         ecpDeleteBtn.addEventListener('click', () => {
-            if (!selectedElement) return;
-            selectedElement.remove();
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => el.remove());
             deselectElement();
             updateEditorFromPreview();
-            showToast('Element deleted');
+            showToast('Elements deleted');
         });
 
         ecpStripAnimBtn.addEventListener('click', () => {
-            if (!selectedElement) return;
-            // Remove SMIL
-            selectedElement.querySelectorAll('animate, animateTransform, animateMotion, set').forEach(a => a.remove());
-            // Remove CSS animation classes
-            Array.from(selectedElement.classList).filter(c => c.startsWith('anim-')).forEach(c => selectedElement.classList.remove(c));
-            selectedElement.style.animation = '';
-            // Remove filter
-            selectedElement.removeAttribute('filter');
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => {
+                el.querySelectorAll('animate, animateTransform, animateMotion, set').forEach(a => a.remove());
+                Array.from(el.classList).filter(c => c.startsWith('anim-')).forEach(c => el.classList.remove(c));
+                el.style.animation = '';
+                el.removeAttribute('filter');
+            });
             updateEditorFromPreview();
-            populateAnimList(selectedElement);
-            showToast('Animations stripped from element');
+            populateAnimList(selectedElements[0]);
+            showToast('Animations stripped');
         });
 
         // --- Click-to-Select in Preview ---
         svgPreviewContainer.addEventListener('click', (e) => {
             // Ignore clicks on control panel, zoom controls, and buttons
-            if (e.target.closest('#elControlPanel') || e.target.closest('.zoom-controls') || e.target.closest('button')) return;
+            if (e.target.closest('#elControlPanel') || e.target.closest('.zoom-controls') || e.target.closest('button') || e.target.closest('.marquee-box')) return;
 
             const svgRoot = svgTransformWrapper.querySelector('svg');
             if (!svgRoot) return;
@@ -5366,20 +5596,20 @@
                         target = target.parentElement;
                         continue;
                     }
-                    selectElement(target);
+                    selectElement(target, e.shiftKey);
                     e.stopPropagation();
                     return;
                 }
                 target = target.parentElement;
             }
 
-            // Clicked on empty space or SVG root → deselect
-            deselectElement();
+            // Clicked on empty space or SVG root → deselect if not shifting (handled by marquee start mostly, but safe here)
+            if (!e.shiftKey) deselectElement();
         }, true);
 
         // Keyboard: Delete/Backspace to delete selected, Escape to deselect
         document.addEventListener('keydown', (e) => {
-            if (!selectedElement) return;
+            if (selectedElements.length === 0) return;
             // Don't intercept when typing in inputs
             if (e.target.closest('input, textarea, .CodeMirror')) return;
 
@@ -5588,7 +5818,7 @@
             ecpEditPathBtn.classList.toggle('active', isPathEditing);
             ecpEditPathBtn.textContent = isPathEditing ? '✓ Stop Editing Points' : '✎ Edit Path Points';
 
-            const activeEl = selectedElement;
+            const activeEl = selectedElements.length === 1 ? selectedElements[0] : null;
             if (isPathEditing && activeEl && activeEl.tagName.toLowerCase() === 'path') {
                 createPathHandles(activeEl);
             } else {
@@ -5898,6 +6128,105 @@
 
 
         // ═══ PERFORMANCE: rAF-Throttled Pan ═══
+
+        // ═══ MARQUEE SELECTION ═══
+        let isMarquee = false;
+        let marqueeStart = { x: 0, y: 0 };
+        let marqueeBox = document.createElement('div');
+        marqueeBox.className = 'marquee-box';
+        marqueeBox.style.position = 'absolute';
+        marqueeBox.style.border = '1px dashed #E5FF00';
+        marqueeBox.style.backgroundColor = 'rgba(229, 255, 0, 0.1)';
+        marqueeBox.style.pointerEvents = 'none';
+        marqueeBox.style.zIndex = '100';
+        marqueeBox.style.display = 'none';
+        svgPreviewContainer.appendChild(marqueeBox);
+
+        svgPreviewContainer.addEventListener('mousedown', (e) => {
+            // Only left click, and ignore if clicking on existing selected element unless shifting
+            if (e.button !== 0) return;
+            if (e.target.closest('#elControlPanel') || e.target.closest('.zoom-controls') || e.target.closest('button')) return;
+
+            // If we clicked directly on an unselected element, we let the click handler deal with it
+            // So we only start marquee if we click on empty space (the container, wrapper, or root svg)
+            const isCanvasBackground = e.target === svgPreviewContainer || e.target === svgTransformWrapper || e.target === svgTransformWrapper.querySelector('svg');
+
+            if (isCanvasBackground) {
+                isMarquee = true;
+                const rect = svgPreviewContainer.getBoundingClientRect();
+                marqueeStart.x = e.clientX - rect.left;
+                marqueeStart.y = e.clientY - rect.top;
+
+                marqueeBox.style.left = marqueeStart.x + 'px';
+                marqueeBox.style.top = marqueeStart.y + 'px';
+                marqueeBox.style.width = '0px';
+                marqueeBox.style.height = '0px';
+                marqueeBox.style.display = 'block';
+
+                if (!e.shiftKey) deselectElement();
+            }
+        });
+
+        svgPreviewContainer.addEventListener('mousemove', (e) => {
+            if (!isMarquee) return;
+            const rect = svgPreviewContainer.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+
+            const x = Math.min(marqueeStart.x, currentX);
+            const y = Math.min(marqueeStart.y, currentY);
+            const w = Math.abs(currentX - marqueeStart.x);
+            const h = Math.abs(currentY - marqueeStart.y);
+
+            marqueeBox.style.left = x + 'px';
+            marqueeBox.style.top = y + 'px';
+            marqueeBox.style.width = w + 'px';
+            marqueeBox.style.height = h + 'px';
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (!isMarquee) return;
+            isMarquee = false;
+            marqueeBox.style.display = 'none';
+
+            const mRect = marqueeBox.getBoundingClientRect();
+            // If the box is basically a click, do nothing
+            if (mRect.width < 5 && mRect.height < 5) return;
+
+            const svgRoot = svgTransformWrapper.querySelector('svg');
+            if (!svgRoot) return;
+
+            // Find all elements inside the marquee
+            const newSelections = [];
+            const walker = document.createTreeWalker(svgRoot, NodeFilter.SHOW_ELEMENT, null, false);
+            let node;
+            while (node = walker.nextNode()) {
+                const tag = node.tagName.toLowerCase();
+                if (selectableTagNames.has(tag) && tag !== 'g' && tag !== 'use' && tag !== 'clipPath') {
+                    // Quick check if element bounds intersect marquee
+                    const elRect = node.getBoundingClientRect();
+                    if (
+                        elRect.left < mRect.right &&
+                        elRect.right > mRect.left &&
+                        elRect.top < mRect.bottom &&
+                        elRect.bottom > mRect.top
+                    ) {
+                        newSelections.push(node);
+                    }
+                }
+            }
+
+            if (newSelections.length > 0) {
+                newSelections.forEach(el => {
+                    if (!selectedElements.includes(el)) {
+                        selectedElements.push(el);
+                        el.classList.add('el-selected');
+                    }
+                });
+                updateECP();
+            }
+        });
+
         let panRAF = null;
         const originalPanHandler = (e) => {
             if (!isPanning) return;
