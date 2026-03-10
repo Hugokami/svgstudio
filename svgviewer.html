@@ -941,6 +941,25 @@
                                         class="w-full accent-accent bg-bg h-4 opacity-70 hover:opacity-100 transition-opacity">
                                 </div>
                             </div>
+                            <div class="flex gap-2">
+                                <div class="flex-1">
+                                    <label
+                                        class="block text-[10px] text-muted mb-1.5 uppercase tracking-wider font-tech">Stagger Amount (s)</label>
+                                    <input type="number" id="animStagger" value="0" min="0" step="0.05"
+                                        class="w-full bg-bg border border-border hover:border-accent/50 p-1.5 text-xs text-gray-200 outline-none transition-colors font-tech">
+                                </div>
+                                <div class="flex-1">
+                                    <label
+                                        class="block text-[10px] text-muted mb-1.5 uppercase tracking-wider font-tech">Stagger From</label>
+                                    <select id="animStaggerFrom"
+                                        class="w-full bg-bg border border-border hover:border-accent/50 p-1.5 text-xs text-gray-200 outline-none transition-colors font-tech">
+                                        <option value="start" selected>START</option>
+                                        <option value="end">END</option>
+                                        <option value="center">CENTER</option>
+                                        <option value="edges">EDGES</option>
+                                    </select>
+                                </div>
+                            </div>
                             <button id="applyCustomAnimBtn" class="btn-accent mt-1 w-full py-2">APPLY ANIMATION</button>
                         </div>
                     </div>
@@ -1082,7 +1101,30 @@
                     </div>
                     <div class="ecp-body">
                         <!-- Standard Properties (Hidden for text editing focus if desired, but let's keep them) -->
-                        <div class="ecp-section-title">Properties</div>
+
+
+                        <div class="ecp-section-title" style="margin-top: 8px;">Components & Instances</div>
+                        <div class="ecp-row" style="justify-content: space-between; gap: 6px;">
+                            <button id="ecpConvertToSymbolBtn" class="ecp-btn accent" style="flex:1;" title="Wrap in <symbol> and create a <use> instance">Convert to Symbol</button>
+                            <button id="ecpDuplicateInstanceBtn" class="ecp-btn" style="flex:1; display: none;" title="Duplicate selected <use> instance">Duplicate Instance</button>
+                        </div>
+                        <div class="ecp-section-title" style="margin-top: 8px;">Align & Distribute</div>
+
+                        <div class="ecp-row" style="justify-content: space-between; gap: 2px;">
+                            <button id="ecpAlignLeftBtn" class="ecp-btn" style="flex:1;" title="Align Left">⇤</button>
+                            <button id="ecpAlignCenterBtn" class="ecp-btn" style="flex:1;" title="Align Center">⇹</button>
+                            <button id="ecpAlignRightBtn" class="ecp-btn" style="flex:1;" title="Align Right">⇥</button>
+                            <div style="width: 4px;"></div>
+                            <button id="ecpAlignTopBtn" class="ecp-btn" style="flex:1;" title="Align Top">⇡</button>
+                            <button id="ecpAlignMiddleBtn" class="ecp-btn" style="flex:1;" title="Align Middle">⇕</button>
+                            <button id="ecpAlignBottomBtn" class="ecp-btn" style="flex:1;" title="Align Bottom">⇣</button>
+                        </div>
+                        <div class="ecp-row" style="justify-content: space-between; gap: 2px; margin-top: 4px;">
+                            <button id="ecpDistHorizBtn" class="ecp-btn" style="flex:1;" title="Distribute Horizontally">↔ Dist H</button>
+                            <button id="ecpDistVertBtn" class="ecp-btn" style="flex:1;" title="Distribute Vertically">↕ Dist V</button>
+                        </div>
+                        <div class="ecp-section-title" style="margin-top: 8px;">Properties</div>
+
                         <div class="ecp-row">
                             <span class="ecp-label">Opacity</span>
                             <input type="range" id="ecpOpacity" class="ecp-input" min="0" max="1" step="0.05" value="1">
@@ -1148,15 +1190,20 @@
                             </div>
                         </div>
 
+
                         <div class="ecp-section-title">Animations</div>
                         <div id="ecpAnimList" style="display:flex;flex-direction:column;gap:4px;">
                             <span style="font-family:'Jura',monospace;font-size:10px;color:#555;">No animations</span>
                         </div>
 
                         <div style="display:flex;gap:6px;margin-top:4px;">
+                            <button id="ecpBindPathBtn" class="ecp-btn accent" style="flex:1; display:none;" title="Bind element to follow a path">〰 Bind to Path</button>
+                        </div>
+                        <div style="display:flex;gap:6px;margin-top:4px;">
                             <button id="ecpDeleteBtn" class="ecp-btn danger" style="flex:1;">✕ Delete Element</button>
                             <button id="ecpStripAnimBtn" class="ecp-btn accent" style="flex:1;">⊘ Strip Anims</button>
                         </div>
+
                         <div id="ecpPathSection" style="display:none; margin-top:8px;">
                             <button id="ecpEditPathBtn"
                                 class="w-full py-1.5 bg-accent/20 border border-accent/50 text-accent font-tech text-[10px] uppercase tracking-wider hover:bg-accent hover:text-bg transition-all">✎
@@ -1889,11 +1936,29 @@
             const iteration = document.getElementById('animIteration').value || 'infinite';
             const origin = document.getElementById('animOrigin').value || 'center';
             const intensity = document.getElementById('animIntensity').value || '1';
-            applyCustomAnimation(type, duration, easing, direction, delay, iteration, origin, intensity);
+            const stagger = document.getElementById('animStagger').value || '0';
+            const staggerFrom = document.getElementById('animStaggerFrom').value || 'start';
+            applyCustomAnimation(type, duration, easing, direction, delay, iteration, origin, intensity, stagger, staggerFrom);
         });
 
-        function applyCustomAnimation(type, duration, easing, direction, delay, iteration, origin, intensity) {
+        function applyCustomAnimation(type, duration, easing, direction, delay, iteration, origin, intensity, stagger, staggerFrom) {
             animateDropdown.classList.add('hidden');
+
+            // Critical fix: Ensure any temp IDs added dynamically (stagger-target, wrap-target)
+            // or existing changes on selectedElements are synced to CodeMirror BEFORE we parse doc.
+            let needsSync = false;
+            if (selectedElements.length > 0) {
+                selectedElements.forEach(el => {
+                    if (!el.id) {
+                        el.id = 'target-' + Math.random().toString(36).substr(2, 9);
+                        needsSync = true;
+                    }
+                });
+            }
+            if (needsSync) {
+                updateEditorFromPreview();
+            }
+
             const code = editor.getValue();
             const doc = new DOMParser().parseFromString(code, "image/svg+xml");
             const svg = doc.querySelector('svg');
@@ -1907,8 +1972,54 @@
                 svg.insertBefore(style, svg.firstChild);
             }
 
+            // Check if there's a selected group we should apply stagger to
+            const applyStagger = parseFloat(stagger) > 0;
+            let staggerTargets = [];
+
+            // Allow staggering if multiple elements are selected, or if a single group is selected
+            if (selectedElements.length > 1) {
+                // Stagger across multi-selected elements
+                // They have IDs now because of the sync check above
+                selectedElements.forEach(el => {
+                    const elInDoc = doc.getElementById(el.id);
+                    if (elInDoc) staggerTargets.push(elInDoc);
+                });
+            } else if (selectedElements.length === 1 && selectedElements[0].tagName.toLowerCase() === 'g') {
+                // Single group selected: stagger its children
+                const groupInDoc = doc.getElementById(selectedElements[0].id);
+                if (groupInDoc) {
+                    staggerTargets = Array.from(groupInDoc.children).filter(c => c.tagName !== 'defs' && c.tagName !== 'style' && c.tagName !== 'title' && c.tagName !== 'desc');
+                }
+            } else if (applyStagger && selectedElements.length === 0) {
+                // If stagger is requested but nothing is selected, stagger all root elements
+                staggerTargets = Array.from(svg.children).filter(c => c.tagName !== 'defs' && c.tagName !== 'style' && c.tagName !== 'metadata' && c.tagName !== 'title' && c.tagName !== 'desc');
+            }
+
             // Helper to wrap elements to preserve their own internal transforms
             function getWrapperGroup() {
+                // If we are staggering, we don't wrap, we apply directly to targets later
+                if (staggerTargets.length > 0) {
+                    return null;
+                }
+
+                // If specific element(s) are selected (but no stagger), wrap them all together
+                if (selectedElements.length > 0) {
+                    let g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
+                    // We need to find them in the parsed doc.
+                    let elementsToWrap = [];
+                    selectedElements.forEach(el => {
+                        const elInDoc = doc.getElementById(el.id);
+                        if (elInDoc) elementsToWrap.push(elInDoc);
+                    });
+
+                    if (elementsToWrap.length > 0) {
+                        elementsToWrap[0].parentNode.insertBefore(g, elementsToWrap[0]);
+                        elementsToWrap.forEach(el => g.appendChild(el));
+                        return g;
+                    }
+                }
+
+                // Default: wrap everything
                 let g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
                 const children = Array.from(svg.childNodes);
                 children.forEach(child => {
@@ -1920,46 +2031,81 @@
                 return g;
             }
 
+            function applyAnimationToElement(el, cls, idx = 0, total = 1) {
+                if (cls) el.classList.add(cls);
+                if (applyStagger && total > 1) {
+                    let staggerDelay = parseFloat(delay);
+                    const staggerAmount = parseFloat(stagger);
+                    if (staggerFrom === 'start') {
+                        staggerDelay += idx * staggerAmount;
+                    } else if (staggerFrom === 'end') {
+                        staggerDelay += (total - 1 - idx) * staggerAmount;
+                    } else if (staggerFrom === 'center') {
+                        const centerIdx = (total - 1) / 2;
+                        staggerDelay += Math.abs(idx - centerIdx) * staggerAmount;
+                    } else if (staggerFrom === 'edges') {
+                        const centerIdx = (total - 1) / 2;
+                        staggerDelay += (centerIdx - Math.abs(idx - centerIdx)) * staggerAmount;
+                    }
+                    // Apply inline style for specific delay
+                    el.style.animationDelay = `${staggerDelay}s`;
+                }
+            }
+
+
+            function applyClassToTargets(cls, additionalSetup = null) {
+                if (staggerTargets.length > 0) {
+                    staggerTargets.forEach((el, idx) => {
+                        if (additionalSetup) additionalSetup(el);
+                        applyAnimationToElement(el, cls, idx, staggerTargets.length);
+                    });
+                } else {
+                    const wrapper = getWrapperGroup();
+                    if (additionalSetup) additionalSetup(wrapper);
+                    applyAnimationToElement(wrapper, cls, 0, 1);
+                }
+            }
+
             const animProps = `${duration}s ${easing} ${delay}s ${iteration} ${direction}`;
             const originStyle = `transform-origin: ${origin}; transform-box: fill-box;`;
 
             if (type === 'spin') {
                 if (!style.textContent.includes('@keyframes spin')) style.textContent += `\n@keyframes spin { 100% { transform: rotate(360deg); } }`;
                 style.textContent += `\n.anim-spin { animation: spin ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-spin');
+                applyClassToTargets('anim-spin');
             } else if (type === 'pulse') {
                 const pScale = 1 + (0.05 * intensity);
                 if (!style.textContent.includes('@keyframes pulse')) style.textContent += `\n@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(${pScale}); } }`;
                 style.textContent += `\n.anim-pulse { animation: pulse ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-pulse');
+                applyClassToTargets('anim-pulse');
             } else if (type === 'float') {
                 const fDist = 15 * intensity;
                 if (!style.textContent.includes('@keyframes float')) style.textContent += `\n@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-${fDist}px); } }`;
                 style.textContent += `\n.anim-float { animation: float ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-float');
+                applyClassToTargets('anim-float');
             } else if (type === 'shake') {
                 const sDist = 5 * intensity;
                 const sRot = 2 * intensity;
                 if (!style.textContent.includes('@keyframes shake')) style.textContent += `\n@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-${sDist}px) rotate(-${sRot}deg); } 75% { transform: translateX(${sDist}px) rotate(${sRot}deg); } }`;
                 style.textContent += `\n.anim-shake { animation: shake ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-shake');
+                applyClassToTargets('anim-shake');
             } else if (type === 'fade') {
                 if (!style.textContent.includes('@keyframes fade')) style.textContent += `\n@keyframes fade { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }`;
                 style.textContent += `\n.anim-fade { animation: fade ${animProps}; }\n`;
-                getWrapperGroup().classList.add('anim-fade');
+                applyClassToTargets('anim-fade');
             } else if (type === 'bounce') {
                 const bDist = 15 * intensity;
                 if (!style.textContent.includes('@keyframes bounce')) style.textContent += `\n@keyframes bounce { 0%, 100% { transform: translateY(0); animation-timing-function: cubic-bezier(0.8,0,1,1); } 50% { transform: translateY(-${bDist}%); animation-timing-function: cubic-bezier(0,0,0.2,1); } }`;
                 style.textContent += `\n.anim-bounce { animation: bounce ${animProps}; transform-origin: bottom center; transform-box: fill-box; }\n`;
-                getWrapperGroup().classList.add('anim-bounce');
+                applyClassToTargets('anim-bounce');
             } else if (type === 'orbit') {
                 const oDist = 20 * intensity;
                 if (!style.textContent.includes('@keyframes orbitAnim')) style.textContent += `\n@keyframes orbitAnim { 0% { transform: rotate(0deg) translateX(${oDist}px) rotate(0deg); } 100% { transform: rotate(360deg) translateX(${oDist}px) rotate(-360deg); } }`;
                 style.textContent += `\n.anim-orbit { animation: orbitAnim ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-orbit');
+                applyClassToTargets('anim-orbit');
             } else if (type.startsWith('draw') || type.startsWith('dash') || type.startsWith('adv-stroke')) {
                 const shapes = svg.querySelectorAll('path, circle, rect, polygon, polyline, ellipse, text, tspan, textPath');
-                shapes.forEach(shape => {
+                shapes.forEach((shape, idx) => {
                     shape.setAttribute('pathLength', '1'); // Normalize lengths
                     if (!shape.hasAttribute('stroke') && !shape.style.stroke) {
                         shape.setAttribute('stroke', '#E5FF00');
@@ -1978,35 +2124,35 @@
                     if (type === 'draw') {
                         if (!style.textContent.includes('@keyframes drawLine')) style.textContent += `\n@keyframes drawLine { to { stroke-dashoffset: 0; } }`;
                         style.textContent += `\n.anim-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: drawLine ${animProps}; }\n`;
-                        shape.classList.add('anim-draw');
+                        applyAnimationToElement(shape, 'anim-draw', idx, shapes.length);
                     } else if (type === 'draw-loop') {
                         if (!style.textContent.includes('@keyframes drawLoop')) style.textContent += `\n@keyframes drawLoop { 0% { stroke-dashoffset: 1; } 100% { stroke-dashoffset: 0; } }`;
                         style.textContent += `\n.anim-draw-loop { stroke-dasharray: 1; stroke-dashoffset: 1; animation: drawLoop ${animProps}; }\n`;
-                        shape.classList.add('anim-draw-loop');
+                        applyAnimationToElement(shape, 'anim-draw-loop', idx, shapes.length);
                     } else if (type === 'dash-march') {
                         if (!style.textContent.includes('@keyframes dashMarch')) style.textContent += `\n@keyframes dashMarch { to { stroke-dashoffset: -1; } }`;
                         style.textContent += `\n.anim-dash-march { stroke-dasharray: 0.05 0.05; animation: dashMarch ${animProps}; }\n`;
-                        shape.classList.add('anim-dash-march');
+                        applyAnimationToElement(shape, 'anim-dash-march', idx, shapes.length);
                     } else if (type === 'draw-erase') {
                         if (!style.textContent.includes('@keyframes drawErase')) style.textContent += `\n@keyframes drawErase { 0% { stroke-dashoffset: 1; } 50% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -1; } }`;
                         style.textContent += `\n.anim-draw-erase { stroke-dasharray: 1; stroke-dashoffset: 1; animation: drawErase ${animProps}; }\n`;
-                        shape.classList.add('anim-draw-erase');
+                        applyAnimationToElement(shape, 'anim-draw-erase', idx, shapes.length);
                     } else if (type === 'dash-flow') {
                         if (!style.textContent.includes('@keyframes dashFlow')) style.textContent += `\n@keyframes dashFlow { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -2; } }`;
                         style.textContent += `\n.anim-dash-flow { stroke-dasharray: 0.1 0.2 0.3 0.1; animation: dashFlow ${animProps}; stroke-linecap: round; }\n`;
-                        shape.classList.add('anim-dash-flow');
+                        applyAnimationToElement(shape, 'anim-dash-flow', idx, shapes.length);
                     } else if (type === 'adv-stroke-draw') {
                         if (!style.textContent.includes('@keyframes advStrokeDraw')) style.textContent += `\n@keyframes advStrokeDraw { to { stroke-dashoffset: 0; } }`;
                         style.textContent += `\n.anim-adv-stroke-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: advStrokeDraw ${animProps}; }\n`;
-                        shape.classList.add('anim-adv-stroke-draw');
+                        applyAnimationToElement(shape, 'anim-adv-stroke-draw', idx, shapes.length);
                     } else if (type === 'adv-stroke-beam') {
                         if (!style.textContent.includes('@keyframes advStrokeBeam')) style.textContent += `\n@keyframes advStrokeBeam { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -2; } }`;
                         style.textContent += `\n.anim-adv-stroke-beam { stroke-dasharray: 0.1 0.9; animation: advStrokeBeam ${animProps}; stroke-linecap: round; }\n`;
-                        shape.classList.add('anim-adv-stroke-beam');
+                        applyAnimationToElement(shape, 'anim-adv-stroke-beam', idx, shapes.length);
                     } else if (type === 'adv-stroke-dash') {
                         if (!style.textContent.includes('@keyframes advStrokeDash')) style.textContent += `\n@keyframes advStrokeDash { to { stroke-dashoffset: -1; } }`;
                         style.textContent += `\n.anim-adv-stroke-dash { stroke-dasharray: 0.05 0.05; animation: advStrokeDash ${animProps}; }\n`;
-                        shape.classList.add('anim-adv-stroke-dash');
+                        applyAnimationToElement(shape, 'anim-adv-stroke-dash', idx, shapes.length);
                     }
                 });
             } else if (type === 'neon') {
@@ -2018,32 +2164,31 @@
                     filter.innerHTML = `<feGaussianBlur stdDeviation="${s1}" result="blur1" /><feGaussianBlur stdDeviation="${s2}" result="blur2" /><feGaussianBlur stdDeviation="${s3}" result="blur3" /><feMerge><feMergeNode in="blur3"/><feMergeNode in="blur2"/><feMergeNode in="blur1"/><feMergeNode in="SourceGraphic"/></feMerge>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('filter', 'url(#animNeonFilter)');
                 if (!style.textContent.includes('@keyframes neonPulse')) style.textContent += `\n@keyframes neonPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }`;
                 style.textContent += `\n.anim-neon-pulse { animation: neonPulse ${animProps}; }\n`;
-                wrapper.classList.add('anim-neon-pulse');
+                applyClassToTargets('anim-neon-pulse', el => el.setAttribute('filter', 'url(#animNeonFilter)'));
             } else if (type === 'cyber-sweep') {
                 if (!svg.querySelector('#cyberGrad')) {
                     const defs = doc.createElementNS("http://www.w3.org/2000/svg", "defs");
                     defs.innerHTML = `<linearGradient id="cyberGrad" x1="0%" y1="0%" x2="200%" y2="0%"><stop offset="0%" stop-color="#E5FF00" stop-opacity="0"/><stop offset="50%" stop-color="#E5FF00" stop-opacity="1"/><stop offset="100%" stop-color="#E5FF00" stop-opacity="0"/></linearGradient><mask id="cyberMask"><rect x="-100%" y="-100%" width="300%" height="300%" fill="url(#cyberGrad)"><animate attributeName="x" values="-100%;100%" dur="${duration}s" repeatCount="indefinite"/></rect></mask>`;
                     svg.insertBefore(defs, svg.firstChild);
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('mask', 'url(#cyberMask)');
-                wrapper.setAttribute('fill', '#E5FF00');
+                applyClassToTargets('', el => {
+                    el.setAttribute('mask', 'url(#cyberMask)');
+                    el.setAttribute('fill', '#E5FF00');
+                });
             } else if (type === 'rubberband') {
                 if (!style.textContent.includes('@keyframes rubberband')) style.textContent += `\n@keyframes rubberband { 0% { transform: scale3d(1,1,1); } 30% { transform: scale3d(1.25, 0.75, 1); } 40% { transform: scale3d(0.75, 1.25, 1); } 50% { transform: scale3d(1.15, 0.85, 1); } 65% { transform: scale3d(0.95, 1.05, 1); } 75% { transform: scale3d(1.05, 0.95, 1); } 100% { transform: scale3d(1, 1, 1); } }`;
                 style.textContent += `\n.anim-rubber { animation: rubberband ${animProps}; transform-origin: center; transform-box: fill-box; }\n`;
-                getWrapperGroup().classList.add('anim-rubber');
+                applyClassToTargets('anim-rubber');
             } else if (type === 'swing') {
                 if (!style.textContent.includes('@keyframes swing3d')) style.textContent += `\n@keyframes swing3d { 20% { transform: rotate3d(0, 0, 1, 15deg); } 40% { transform: rotate3d(0, 0, 1, -10deg); } 60% { transform: rotate3d(0, 0, 1, 5deg); } 80% { transform: rotate3d(0, 0, 1, -5deg); } 100% { transform: rotate3d(0, 0, 1, 0deg); } }`;
                 style.textContent += `\n.anim-swing { animation: swing3d ${animProps}; transform-origin: top center; transform-box: fill-box; }\n`;
-                getWrapperGroup().classList.add('anim-swing');
+                applyClassToTargets('anim-swing');
             } else if (type === 'glitch-shake') {
                 if (!style.textContent.includes('@keyframes glitchShake')) style.textContent += `\n@keyframes glitchShake { 0% { transform: translate(0) } 20% { transform: translate(-2px, 2px) } 40% { transform: translate(-2px, -2px) } 60% { transform: translate(2px, 2px) } 80% { transform: translate(2px, -2px) } 100% { transform: translate(0) } }`;
                 style.textContent += `\n.anim-glitch-shake { animation: glitchShake ${animProps}; }\n`;
-                getWrapperGroup().classList.add('anim-glitch-shake');
+                applyClassToTargets('anim-glitch-shake');
             } else if (type === 'glitch') {
                 // Add FeTurbulence Glitch Filter
                 if (!svg.querySelector('#animGlitchFilter')) {
@@ -2053,12 +2198,10 @@
                     filter.innerHTML = `<feTurbulence type="turbulence" baseFrequency="0.05" numOctaves="2" result="turbulence"><animate attributeName="baseFrequency" values="0.05;0.1;0.05" dur="0.2s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in2="turbulence" in="SourceGraphic" scale="${gScale}" xChannelSelector="R" yChannelSelector="G"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('filter', 'url(#animGlitchFilter)');
 
                 if (!style.textContent.includes('@keyframes glitchJitter')) style.textContent += `\n@keyframes glitchJitter { 0% { transform: translate(0); } 20% { transform: translate(-2px, 2px); } 40% { transform: translate(-2px, -2px); } 60% { transform: translate(2px, 2px); } 80% { transform: translate(2px, -2px); } 100% { transform: translate(0); } }`;
                 style.textContent += `\n.anim-glitch-jitter { animation: glitchJitter ${duration}s ${delay}s ${iteration} forwards; }\n`;
-                wrapper.classList.add('anim-glitch-jitter');
+                applyClassToTargets('anim-glitch-jitter', el => el.setAttribute('filter', 'url(#animGlitchFilter)'));
 
             } else if (type === 'gooey') {
                 // Add Gooey ColorMatrix Filter
@@ -2069,8 +2212,7 @@
                     filter.innerHTML = `<feGaussianBlur in="SourceGraphic" stdDeviation="${gBlur}" result="blur" /><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" /><feBlend in="SourceGraphic" in2="goo" />`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('filter', 'url(#animGooeyFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#animGooeyFilter)'));
 
             } else if (type === 'path-morph') {
                 // VERY basic path morph implementation (finds the first path and adds a dummy morph)
@@ -2099,7 +2241,7 @@
                     filter.innerHTML = `<feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="3" result="noise"><animate attributeName="baseFrequency" values="0.01;0.015;0.01" dur="${duration}s" repeatCount="indefinite"/></feTurbulence><feColorMatrix type="hueRotate" values="0"><animate attributeName="values" from="0" to="360" dur="${duration}s" repeatCount="indefinite"/></feColorMatrix><feComponentTransfer><feFuncA type="linear" slope="0.8"/></feComponentTransfer><feBlend in="SourceGraphic" in2="noise" mode="screen"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#holoFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#holoFilter)'));
             } else if (type === 'crt') {
                 if (!svg.querySelector('#crtFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2107,7 +2249,7 @@
                     filter.innerHTML = `<feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="R" /><feOffset dx="3" dy="0" in="R" result="oR" /><feColorMatrix type="matrix" in="SourceGraphic" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="G" /><feOffset dx="-3" dy="0" in="G" result="oG" /><feColorMatrix type="matrix" in="SourceGraphic" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="B" /><feMerge><feMergeNode in="oR"/><feMergeNode in="oG"/><feMergeNode in="B"/></feMerge>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#crtFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#crtFilter)'));
             } else if (type === 'moshing') {
                 if (!svg.querySelector('#moshFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2115,7 +2257,7 @@
                     filter.innerHTML = `<feTurbulence type="fractalNoise" baseFrequency="0.001 0.5" numOctaves="1" result="warp"><animate attributeName="baseFrequency" values="0.001 0.5;0.1 0.05;0.001 0.5" dur="${duration}s" calcMode="discrete" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="warp" scale="30" xChannelSelector="R" yChannelSelector="G"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#moshFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#moshFilter)'));
             } else if (type === 'heatmap') {
                 if (!svg.querySelector('#heatFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2123,19 +2265,19 @@
                     filter.innerHTML = `<feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 0  0 0 0 0 0  -1 1 0 0 1" result="heat"/><feComponentTransfer in="heat"><feFuncR type="table" tableValues="0 0 1 1"/><feFuncG type="table" tableValues="0 0 0 1"/><feFuncB type="table" tableValues="1 0 0 0"/></feComponentTransfer>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#heatFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#heatFilter)'));
             } else if (type === 'strobe') {
                 if (!style.textContent.includes('@keyframes strobeFlash')) style.textContent += `\n@keyframes strobeFlash { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }`;
                 style.textContent += `\n.anim-strobe { animation: strobeFlash 0.1s infinite; }\n`;
-                getWrapperGroup().classList.add('anim-strobe');
+                applyClassToTargets('anim-strobe');
             } else if (type === 'dialup') {
                 if (!style.textContent.includes('@keyframes dialupReveal')) style.textContent += `\n@keyframes dialupReveal { 0% { clip-path: inset(0 100% 0 0); } 20% { clip-path: inset(0 80% 0 0); } 40% { clip-path: inset(0 40% 0 0); } 60% { clip-path: inset(0 40% 0 0); } 80% { clip-path: inset(0 10% 0 0); } 100% { clip-path: inset(0 0 0 0); } }`;
                 style.textContent += `\n.anim-dialup { animation: dialupReveal ${duration}s steps(5, end) forwards; }\n`;
-                getWrapperGroup().classList.add('anim-dialup');
+                applyClassToTargets('anim-dialup');
             } else if (type === 'magnetic') {
                 if (!style.textContent.includes('@keyframes magneticTilt')) style.textContent += `\n@keyframes magneticTilt { 0% { transform: perspective(400px) rotateX(10deg) rotateY(-20deg) scale(0.9); } 50% { transform: perspective(400px) rotateX(-10deg) rotateY(20deg) scale(1.1); filter: drop-shadow(-20px 20px 0px rgba(229, 255, 0, 0.2)); } 100% { transform: perspective(400px) rotateX(10deg) rotateY(-20deg) scale(0.9); } }`;
                 style.textContent += `\n.anim-magnetic { animation: magneticTilt ${animProps}; transform-style: preserve-3d; }\n`;
-                getWrapperGroup().classList.add('anim-magnetic');
+                applyClassToTargets('anim-magnetic');
             } else if (type === 'fluid-gradient') {
                 if (!svg.querySelector('#fluidGradFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2144,7 +2286,7 @@
                     filter.innerHTML = `<feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="3" result="warp"><animate attributeName="baseFrequency" values="0.015;0.03;0.015" dur="${duration}s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap xChannelSelector="R" yChannelSelector="G" scale="${fScale}" in="SourceGraphic" in2="warp"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#fluidGradFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#fluidGradFilter)'));
             } else if (type === 'motion-blur') {
                 if (!svg.querySelector('#motionBlurX')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2155,17 +2297,15 @@
                 }
                 if (!style.textContent.includes('@keyframes fastPan')) style.textContent += `\n@keyframes fastPan { 0% { transform: translateX(-100px); } 50% { transform: translateX(100px); } 100% { transform: translateX(-100px); } }`;
                 style.textContent += `\n.anim-motion-blur { animation: fastPan ${animProps}; ${originStyle} }\n`;
-                const g = getWrapperGroup();
-                g.classList.add('anim-motion-blur');
-                g.setAttribute('filter', 'url(#motionBlurX)');
+                applyClassToTargets('anim-motion-blur', el => el.setAttribute('filter', 'url(#motionBlurX)'));
             } else if (type === 'cine-fade') {
                 if (!style.textContent.includes('@keyframes cineFade')) style.textContent += `\n@keyframes cineFade { 0% { opacity: 0; transform: scale(0.9) translateY(20px); filter: blur(10px); } 30%, 70% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0px); } 100% { opacity: 0; transform: scale(1.05) translateY(-10px); filter: blur(10px); } }`;
                 style.textContent += `\n.anim-cine-fade { animation: cineFade ${duration}s cubic-bezier(0.25, 1, 0.5, 1) infinite; }\n`;
-                getWrapperGroup().classList.add('anim-cine-fade');
+                applyClassToTargets('anim-cine-fade');
             } else if (type === 'ae-wiggle') {
                 if (!style.textContent.includes('@keyframes wigglePath')) style.textContent += `\n@keyframes wigglePath { 0% { transform: translate(0px, 0px) rotate(0deg); } 20% { transform: translate(${Math.random() * 10 - 5}px, ${Math.random() * 10 - 5}px) rotate(${Math.random() * 4 - 2}deg); } 40% { transform: translate(${Math.random() * 10 - 5}px, ${Math.random() * 10 - 5}px) rotate(${Math.random() * 4 - 2}deg); } 60% { transform: translate(${Math.random() * 10 - 5}px, ${Math.random() * 10 - 5}px) rotate(${Math.random() * 4 - 2}deg); } 80% { transform: translate(${Math.random() * 10 - 5}px, ${Math.random() * 10 - 5}px) rotate(${Math.random() * 4 - 2}deg); } 100% { transform: translate(0px, 0px) rotate(0deg); } }`;
                 style.textContent += `\n.anim-wiggle { animation: wigglePath ${duration}s ease-in-out infinite; }\n`;
-                getWrapperGroup().classList.add('anim-wiggle');
+                applyClassToTargets('anim-wiggle');
             } else if (type === 'echo-trail') {
                 if (!svg.querySelector('#echoFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2179,7 +2319,7 @@
                 }
                 if (!style.textContent.includes('@keyframes echoMove')) style.textContent += `\n@keyframes echoMove { 0% { transform: translateX(0); } 50% { transform: translateX(50px); } 100% { transform: translateX(0); } }`;
                 style.textContent += `\n.anim-echo { animation: echoMove ${duration}s ease-in-out infinite; filter: url(#echoFilter); }\n`;
-                getWrapperGroup().classList.add('anim-echo');
+                applyClassToTargets('anim-echo');
             } else if (type === 'liquid') {
                 if (!svg.querySelector('#liquidFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2188,23 +2328,23 @@
                     filter.innerHTML = `<feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="3" result="noise"><animate attributeName="baseFrequency" values="0.02;0.05;0.02" dur="${duration}s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="noise" scale="${lScale}" xChannelSelector="R" yChannelSelector="B"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#liquidFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#liquidFilter)'));
             } else if (type === 'typewriter') {
                 if (!style.textContent.includes('@keyframes typewriter')) style.textContent += `\n@keyframes typewriter { 0% { clip-path: inset(0 100% 0 0); } 100% { clip-path: inset(0 0 0 0); } }`;
                 style.textContent += `\n.anim-typewriter { animation: typewriter ${duration}s ${delay}s steps(20) ${iteration} ${direction}; }\n`;
-                getWrapperGroup().classList.add('anim-typewriter');
+                applyClassToTargets('anim-typewriter');
             } else if (type === 'wipe-reveal') {
                 if (!style.textContent.includes('@keyframes wipeReveal')) style.textContent += `\n@keyframes wipeReveal { 0% { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); } 100% { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); } }`;
                 style.textContent += `\n.anim-wipe { animation: wipeReveal ${animProps}; }\n`;
-                getWrapperGroup().classList.add('anim-wipe');
+                applyClassToTargets('anim-wipe');
             } else if (type === 'flip-card') {
                 if (!style.textContent.includes('@keyframes flipCard')) style.textContent += `\n@keyframes flipCard { 0% { transform: perspective(600px) rotateY(0deg); } 50% { transform: perspective(600px) rotateY(180deg); } 100% { transform: perspective(600px) rotateY(360deg); } }`;
                 style.textContent += `\n.anim-flip { animation: flipCard ${animProps}; ${originStyle} transform-style: preserve-3d; }\n`;
-                getWrapperGroup().classList.add('anim-flip');
+                applyClassToTargets('anim-flip');
             } else if (type === 'jelly') {
                 if (!style.textContent.includes('@keyframes jellyWobble')) style.textContent += `\n@keyframes jellyWobble { 0% { transform: scale(1, 1); } 25% { transform: scale(0.9, 1.1); } 50% { transform: scale(1.1, 0.9); } 75% { transform: scale(0.95, 1.05); } 100% { transform: scale(1, 1); } }`;
                 style.textContent += `\n.anim-jelly { animation: jellyWobble ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-jelly');
+                applyClassToTargets('anim-jelly');
             } else if (type === 'scan-lines') {
                 if (!svg.querySelector('#scanlineFilter')) {
                     const defs = svg.querySelector('defs') || doc.createElementNS("http://www.w3.org/2000/svg", "defs");
@@ -2215,9 +2355,10 @@
                     filter.innerHTML = `<feFlood flood-color="#00ff41" flood-opacity="0.03" result="green"/><feBlend in="SourceGraphic" in2="green" mode="screen"/>`;
                     defs.appendChild(filter);
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('mask', 'url(#scanMask)');
-                wrapper.setAttribute('filter', 'url(#scanlineFilter)');
+                applyClassToTargets('', el => {
+                    el.setAttribute('mask', 'url(#scanMask)');
+                    el.setAttribute('filter', 'url(#scanlineFilter)');
+                });
             } else if (type === 'pixelate') {
                 if (!svg.querySelector('#pixelateFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2225,7 +2366,7 @@
                     filter.innerHTML = `<feMorphology operator="dilate" radius="0"><animate attributeName="radius" values="0;4;0" dur="${duration}s" repeatCount="indefinite"/></feMorphology>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#pixelateFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#pixelateFilter)'));
             } else if (type === 'color-cycle') {
                 if (!svg.querySelector('#colorCycleFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2234,7 +2375,7 @@
                     filter.innerHTML = `<feFlood flood-color="#ff0000" result="base"/><feComposite in="base" in2="SourceGraphic" operator="atop" result="colored"/><feColorMatrix in="colored" type="hueRotate" values="0"><animate attributeName="values" from="0" to="360" dur="${duration}s" repeatCount="indefinite"/></feColorMatrix>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#colorCycleFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#colorCycleFilter)'));
             } else if (type === 'spectrum-flow') {
                 if (!svg.querySelector('#spectrumGrad')) {
                     const defs = svg.querySelector('defs') || doc.createElementNS("http://www.w3.org/2000/svg", "defs");
@@ -2252,8 +2393,6 @@
                             </rect>
                         </mask>`;
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('mask', 'url(#spectrumMask)');
                 // Create a colored overlay using feFlood + Composite so it applies to the shape
                 if (!svg.querySelector('#spectrumFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2261,7 +2400,10 @@
                     filter.innerHTML = `<feFlood flood-color="#ffffff" result="white"/><feComposite in="white" in2="SourceGraphic" operator="atop"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                wrapper.setAttribute('filter', 'url(#spectrumFilter)');
+                applyClassToTargets('', el => {
+                    el.setAttribute('mask', 'url(#spectrumMask)');
+                    el.setAttribute('filter', 'url(#spectrumFilter)');
+                });
             } else if (type === 'vortex-gradient') {
                 if (!svg.querySelector('#vortexGrad')) {
                     const defs = svg.querySelector('defs') || doc.createElementNS("http://www.w3.org/2000/svg", "defs");
@@ -2274,10 +2416,9 @@
                         </radialGradient>
                     `;
                 }
-                const wrapper = getWrapperGroup();
                 if (!style.textContent.includes('@keyframes vortexRotate')) style.textContent += `\n@keyframes vortexRotate { 0% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.2); } 100% { transform: rotate(360deg) scale(1); } }`;
                 style.textContent += `\n.anim-vortex { animation: vortexRotate ${duration}s linear infinite; transform-origin: center; transform-box: fill-box; fill: url(#vortexGrad) !important; }\n`;
-                wrapper.classList.add('anim-vortex');
+                applyClassToTargets('anim-vortex');
             } else if (type === 'antigravity-aura') {
                 if (!svg.querySelector('#auraFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2300,19 +2441,19 @@
                     `;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#auraFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#auraFilter)'));
             } else if (type === 'zoom-pulse') {
                 if (!style.textContent.includes('@keyframes zoomPulse')) style.textContent += `\n@keyframes zoomPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }`;
                 style.textContent += `\n.anim-zoom-pulse { animation: zoomPulse ${animProps}; transform-origin: center; transform-box: view-box; }\n`;
-                getWrapperGroup().classList.add('anim-zoom-pulse');
+                applyClassToTargets('anim-zoom-pulse');
             } else if (type === 'text-3d-circle') {
                 if (!style.textContent.includes('@keyframes text3DCircle')) style.textContent += `\n@keyframes text3DCircle { 0% { transform: perspective(800px) rotateX(60deg) rotateZ(0deg); } 100% { transform: perspective(800px) rotateX(60deg) rotateZ(360deg); } }`;
                 style.textContent += `\n.anim-text-3d { animation: text3DCircle ${duration}s linear infinite; transform-origin: center; transform-box: view-box; transform-style: preserve-3d; }\n`;
-                getWrapperGroup().classList.add('anim-text-3d');
+                applyClassToTargets('anim-text-3d');
             } else if (type === 'text-wave') {
                 if (!style.textContent.includes('@keyframes textWave')) style.textContent += `\n@keyframes textWave { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-10px) rotate(5deg); } }`;
                 style.textContent += `\n.anim-text-wave { animation: textWave ${duration}s ease-in-out infinite; transform-origin: center; transform-box: view-box; }\n`;
-                getWrapperGroup().classList.add('anim-text-wave');
+                applyClassToTargets('anim-text-wave');
             } else if (type === 'text-glitch') {
                 if (!svg.querySelector('#textGlitchFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2320,7 +2461,7 @@
                     filter.innerHTML = `<feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="R" /><feOffset dx="-4" dy="0" in="R" result="oR"><animate attributeName="dx" values="-4;4;-2;6;-4" dur="${duration}s" repeatCount="indefinite" calcMode="discrete"/></feOffset><feColorMatrix type="matrix" in="SourceGraphic" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="B" /><feOffset dx="4" dy="0" in="B" result="oB"><animate attributeName="dx" values="4;-4;2;-6;4" dur="${duration}s" repeatCount="indefinite" calcMode="discrete"/></feOffset><feColorMatrix type="matrix" in="SourceGraphic" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="G" /><feMerge><feMergeNode in="oR"/><feMergeNode in="G"/><feMergeNode in="oB"/></feMerge>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#textGlitchFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#textGlitchFilter)'));
             }
 
             let newSvgString = new XMLSerializer().serializeToString(doc);
@@ -4972,14 +5113,12 @@
         const ecpLetterSpacing = document.getElementById('ecpLetterSpacing');
         const ecpTextWarp = document.getElementById('ecpTextWarp');
 
-        let selectedElement = null;
+        let selectedElements = [];
         const selectableTagNames = new Set(['path', 'circle', 'rect', 'polygon', 'polyline', 'ellipse', 'line', 'text', 'textpath', 'tspan', 'g', 'use', 'image', 'clipPath']);
 
         function deselectElement() {
-            if (selectedElement) {
-                selectedElement.classList.remove('el-selected');
-                selectedElement = null;
-            }
+            selectedElements.forEach(el => el.classList.remove('el-selected'));
+            selectedElements = [];
             elControlPanel.classList.remove('open');
             ecpPathSection.style.display = 'none';
             if (isPathEditing) {
@@ -4987,67 +5126,107 @@
             }
         }
 
-        function selectElement(el) {
-            deselectElement();
-            selectedElement = el;
-            el.classList.add('el-selected');
+        function selectElement(el, multi = false) {
+            if (!multi) {
+                deselectElement();
+            }
+            if (!selectedElements.includes(el)) {
+                selectedElements.push(el);
+                el.classList.add('el-selected');
+            }
+
+            updateECP();
+        }
+
+        function updateECP() {
+            if (selectedElements.length === 0) {
+                elControlPanel.classList.remove('open');
+                return;
+            }
             elControlPanel.classList.add('open');
 
+            const firstEl = selectedElements[0];
+            const isMulti = selectedElements.length > 1;
+
             // Populate title
-            const tag = el.tagName.toLowerCase();
-            const id = el.getAttribute('id');
-            const cls = el.getAttribute('class')?.replace('el-selected', '').replace('injected-asset', '').trim();
-            ecpTitle.textContent = `▸ <${tag}>${id ? ' #' + id : ''}${cls ? ' .' + cls : ''}`;
+            if (isMulti) {
+                ecpTitle.textContent = `▸ MIXED SELECTION (${selectedElements.length})`;
+            } else {
+                const tag = firstEl.tagName.toLowerCase();
+                const id = firstEl.getAttribute('id');
+                const cls = firstEl.getAttribute('class')?.replace('el-selected', '').replace('injected-asset', '').trim();
+                ecpTitle.textContent = `▸ <${tag}>${id ? ' #' + id : ''}${cls ? ' .' + cls : ''}`;
+            }
+
+            // Helper to get common property or null if mixed
+            function getCommonProp(attr, styleProp) {
+                const firstVal = firstEl.getAttribute(attr) || firstEl.style[styleProp] || '';
+                for (let i = 1; i < selectedElements.length; i++) {
+                    const val = selectedElements[i].getAttribute(attr) || selectedElements[i].style[styleProp] || '';
+                    if (val !== firstVal) return null;
+                }
+                return firstVal;
+            }
 
             // Populate opacity
-            const op = el.getAttribute('opacity') || el.style.opacity || '1';
-            ecpOpacity.value = parseFloat(op);
-            ecpOpacityVal.textContent = parseFloat(op).toFixed(2);
+            const op = getCommonProp('opacity', 'opacity');
+            ecpOpacity.value = op !== null ? parseFloat(op || '1') : 1;
+            ecpOpacityVal.textContent = op !== null ? parseFloat(op || '1').toFixed(2) : 'MIXED';
 
             // Populate fill/stroke
-            const fill = el.getAttribute('fill') || '';
-            const stroke = el.getAttribute('stroke') || '';
-            const sw = el.getAttribute('stroke-width') || '';
-            ecpFill.value = fill && fill !== 'none' && fill.startsWith('#') ? normalizeToHex(fill) : '#000000';
-            ecpStroke.value = stroke && stroke !== 'none' && stroke.startsWith('#') ? normalizeToHex(stroke) : '#E5FF00';
-            ecpStrokeWidth.value = sw || '1';
+            const fill = getCommonProp('fill', 'fill');
+            const stroke = getCommonProp('stroke', 'stroke');
+            const sw = getCommonProp('stroke-width', 'strokeWidth');
 
-            // Text Controls Visibility & Population
-            if (tag === 'text' || tag === 'textpath') {
+            // We just use the first element's colors as a base if mixed, to avoid breaking color inputs
+            const safeFill = fill || firstEl.getAttribute('fill') || '';
+            const safeStroke = stroke || firstEl.getAttribute('stroke') || '';
+
+            ecpFill.value = safeFill && safeFill !== 'none' && safeFill.startsWith('#') ? normalizeToHex(safeFill) : '#000000';
+            ecpStroke.value = safeStroke && safeStroke !== 'none' && safeStroke.startsWith('#') ? normalizeToHex(safeStroke) : '#E5FF00';
+            ecpStrokeWidth.value = sw !== null ? (sw || '1') : '';
+            if (sw === null) ecpStrokeWidth.placeholder = 'MIX'; else ecpStrokeWidth.placeholder = '';
+
+            // Text Controls Visibility
+            const allText = selectedElements.every(el => el.tagName.toLowerCase() === 'text' || el.tagName.toLowerCase() === 'textpath');
+            if (allText) {
                 ecpTextSection.style.display = 'block';
-                // Handle standard text and textPath
-                const isTextPath = tag === 'textpath';
-                const textNodes = Array.from(el.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
-                ecpTextContent.value = textNodes.map(n => n.textContent).join('').trim();
+                if (!isMulti) {
+                    const tag = firstEl.tagName.toLowerCase();
+                    const isTextPath = tag === 'textpath';
+                    const textNodes = Array.from(firstEl.childNodes).filter(node => node.nodeType === Node.TEXT_NODE);
+                    ecpTextContent.value = textNodes.map(n => n.textContent).join('').trim();
 
-                ecpFontFamily.value = el.getAttribute('font-family') || 'sans-serif';
-                ecpFontSize.value = parseInt(el.getAttribute('font-size') || 24, 10);
-                ecpFontWeight.value = el.getAttribute('font-weight') || 'normal';
-                ecpLetterSpacing.value = parseInt(el.getAttribute('letter-spacing') || 0, 10);
+                    ecpFontFamily.value = firstEl.getAttribute('font-family') || 'sans-serif';
+                    ecpFontSize.value = parseInt(firstEl.getAttribute('font-size') || 24, 10);
+                    ecpFontWeight.value = firstEl.getAttribute('font-weight') || 'normal';
+                    ecpLetterSpacing.value = parseInt(firstEl.getAttribute('letter-spacing') || 0, 10);
 
-                // Determine text warp status (simplified parsing)
-                if (isTextPath) {
-                    const href = el.getAttribute('href') || el.getAttribute('xlink:href');
-                    if (href === '#textWarpCircle') ecpTextWarp.value = 'circle';
-                    else if (href === '#textWarpWave') ecpTextWarp.value = 'wave';
-                    else if (href === '#textWarpArch') ecpTextWarp.value = 'arch';
-                    else ecpTextWarp.value = 'none';
+                    if (isTextPath) {
+                        const href = firstEl.getAttribute('href') || firstEl.getAttribute('xlink:href');
+                        if (href === '#textWarpCircle') ecpTextWarp.value = 'circle';
+                        else if (href === '#textWarpWave') ecpTextWarp.value = 'wave';
+                        else if (href === '#textWarpArch') ecpTextWarp.value = 'arch';
+                        else ecpTextWarp.value = 'none';
+                    } else {
+                        ecpTextWarp.value = 'none';
+                    }
                 } else {
-                    ecpTextWarp.value = 'none';
+                    ecpTextContent.value = 'Multiple Texts Selected';
                 }
             } else {
                 ecpTextSection.style.display = 'none';
             }
 
             // Path Controls
-            if (tag === 'path') {
+            if (!isMulti && firstEl.tagName.toLowerCase() === 'path') {
                 ecpPathSection.style.display = 'block';
             } else {
                 ecpPathSection.style.display = 'none';
             }
 
-            // Populate animation list
-            populateAnimList(el);
+            // Populate animation list (only for first element for now to avoid massive UI clutter)
+            populateAnimList(firstEl);
         }
 
         function populateAnimList(el) {
@@ -5110,66 +5289,330 @@
             }
         }
 
+
+
+        // --- Symbol & Instance Manager ---
+        const ecpConvertToSymbolBtn = document.getElementById('ecpConvertToSymbolBtn');
+        const ecpDuplicateInstanceBtn = document.getElementById('ecpDuplicateInstanceBtn');
+
+        // Update ECP visibility based on selection type
+        const originalUpdateECP = updateECP;
+        updateECP = function() {
+            originalUpdateECP();
+            if (selectedElements.length > 0) {
+                // If every selected element is already a <use>, we can't convert to symbol (it's already instanced)
+                // But we CAN duplicate instances
+                const allUses = selectedElements.every(el => el.tagName.toLowerCase() === 'use');
+                if (allUses) {
+                    ecpConvertToSymbolBtn.style.display = 'none';
+                    ecpDuplicateInstanceBtn.style.display = 'block';
+                } else {
+                    ecpConvertToSymbolBtn.style.display = 'block';
+                    ecpDuplicateInstanceBtn.style.display = 'none';
+                }
+            }
+        };
+
+        ecpConvertToSymbolBtn?.addEventListener('click', () => {
+            if (selectedElements.length === 0) return;
+            const svgNode = svgTransformWrapper.querySelector('svg');
+            if (!svgNode) return;
+
+            let defs = svgNode.querySelector('defs');
+            if (!defs) {
+                defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+                svgNode.insertBefore(defs, svgNode.firstChild);
+            }
+
+            const symbolId = 'sym-' + Math.random().toString(36).substr(2, 6);
+            const symbol = document.createElementNS("http://www.w3.org/2000/svg", "symbol");
+            symbol.id = symbolId;
+
+            // To properly convert to symbol and maintain visual position, we need to calculate bounding box
+            // and set a viewBox on the symbol, OR we just group them, put the group in the symbol, and use
+            // x/y offsets. The cleanest standard way for SVG Studio is to just wrap them in a symbol directly
+            // and use x="0" y="0" so they retain their original coordinates within the SVG canvas.
+
+            // Create a wrapper group for the symbol contents to maintain any relative transforms
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+
+            // We need to operate on the elements in the DOM to maintain their visual order
+            // Sort by DOM order
+            const sortedElements = [...selectedElements].sort((a, b) => {
+                if (a === b) return 0;
+                if (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+                return 1;
+            });
+
+            // Insert a placeholder where the first element was
+            const placeholder = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            sortedElements[0].parentNode.insertBefore(placeholder, sortedElements[0]);
+
+            sortedElements.forEach(el => {
+                g.appendChild(el);
+            });
+
+            symbol.appendChild(g);
+            defs.appendChild(symbol);
+
+            // Create the <use> instance
+            const useEl = document.createElementNS("http://www.w3.org/2000/svg", "use");
+            useEl.setAttribute('href', `#${symbolId}`);
+
+            placeholder.parentNode.replaceChild(useEl, placeholder);
+
+            // Deselect old elements, select the new use instance
+            deselectElement();
+            selectElement(useEl);
+            updateEditorFromPreview();
+            showToast('Converted to Symbol');
+        });
+
+        ecpDuplicateInstanceBtn?.addEventListener('click', () => {
+            if (selectedElements.length === 0) return;
+            const newInstances = [];
+
+            selectedElements.forEach(el => {
+                if (el.tagName.toLowerCase() === 'use') {
+                    const clone = el.cloneNode(true);
+
+                    // Offset the clone slightly so the user sees it
+                    const currentTransform = clone.getAttribute('transform') || '';
+                    clone.setAttribute('transform', currentTransform + ' translate(20, 20)');
+
+                    el.parentNode.insertBefore(clone, el.nextSibling);
+                    newInstances.push(clone);
+                }
+            });
+
+            if (newInstances.length > 0) {
+                deselectElement();
+                newInstances.forEach(el => selectElement(el, true));
+                updateEditorFromPreview();
+                showToast(`Duplicated ${newInstances.length} instance(s)`);
+            }
+        });
+
+        // --- Alignment & Distribution Logic ---
+
+        function getBBoxSafe(el) {
+            try { return el.getBBox(); } catch(e) { return {x:0, y:0, width:0, height:0}; }
+        }
+
+        function setTransformTranslate(el, dx, dy) {
+            // Because getBBox() returns pre-transform bounds, but we are appending to the transform,
+            // we actually only want to add the delta to the *existing* translate, not keep adding it.
+            // Actually, an even safer way is to read the current translate, add the delta, but we must
+            // make sure we don't double-count.
+            // If we use getBoundingClientRect, we get screen coords, which is safer for calculating exact deltas.
+
+            const currentTransform = el.getAttribute('transform') || '';
+            let hasTranslate = false;
+            let newTransform = currentTransform.replace(/translate\(([^)]+)\)/, (match, args) => {
+                hasTranslate = true;
+                const parts = args.split(/[ ,]+/).map(parseFloat);
+                const currentX = parts[0] || 0;
+                const currentY = parts[1] || 0;
+                return `translate(${currentX + dx}, ${currentY + dy})`;
+            });
+
+            if (!hasTranslate) {
+                newTransform = `translate(${dx}, ${dy}) ` + currentTransform;
+            }
+
+            el.setAttribute('transform', newTransform.trim());
+        }
+
+        // Use getBoundingClientRect so it accounts for transforms
+        function getScreenBox(el) {
+            const rect = el.getBoundingClientRect();
+            // We need to convert screen space delta back to SVG view space delta
+            const svg = svgTransformWrapper.querySelector('svg');
+            const pt = svg.createSVGPoint();
+            pt.x = rect.left; pt.y = rect.top;
+            const ctm = svg.getScreenCTM().inverse();
+            const svgTopLeft = pt.matrixTransform(ctm);
+
+            pt.x = rect.right; pt.y = rect.bottom;
+            const svgBottomRight = pt.matrixTransform(ctm);
+
+            return {
+                x: svgTopLeft.x,
+                y: svgTopLeft.y,
+                width: svgBottomRight.x - svgTopLeft.x,
+                height: svgBottomRight.y - svgTopLeft.y
+            };
+        }
+
+        document.getElementById('ecpAlignLeftBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            const minX = Math.min(...boxes.map(b => b.box.x));
+            boxes.forEach(b => {
+                const dx = minX - b.box.x;
+                if(dx !== 0) setTransformTranslate(b.el, dx, 0);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpAlignCenterBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            // Find center of bounding box of all elements
+            const minX = Math.min(...boxes.map(b => b.box.x));
+            const maxX = Math.max(...boxes.map(b => b.box.x + b.box.width));
+            const centerX = minX + (maxX - minX) / 2;
+
+            boxes.forEach(b => {
+                const elCenter = b.box.x + b.box.width / 2;
+                const dx = centerX - elCenter;
+                if(dx !== 0) setTransformTranslate(b.el, dx, 0);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpAlignRightBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            const maxX = Math.max(...boxes.map(b => b.box.x + b.box.width));
+            boxes.forEach(b => {
+                const dx = maxX - (b.box.x + b.box.width);
+                if(dx !== 0) setTransformTranslate(b.el, dx, 0);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpAlignTopBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            const minY = Math.min(...boxes.map(b => b.box.y));
+            boxes.forEach(b => {
+                const dy = minY - b.box.y;
+                if(dy !== 0) setTransformTranslate(b.el, 0, dy);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpAlignMiddleBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            const minY = Math.min(...boxes.map(b => b.box.y));
+            const maxY = Math.max(...boxes.map(b => b.box.y + b.box.height));
+            const centerY = minY + (maxY - minY) / 2;
+
+            boxes.forEach(b => {
+                const elCenter = b.box.y + b.box.height / 2;
+                const dy = centerY - elCenter;
+                if(dy !== 0) setTransformTranslate(b.el, 0, dy);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpAlignBottomBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 2) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)}));
+            const maxY = Math.max(...boxes.map(b => b.box.y + b.box.height));
+            boxes.forEach(b => {
+                const dy = maxY - (b.box.y + b.box.height);
+                if(dy !== 0) setTransformTranslate(b.el, 0, dy);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpDistHorizBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 3) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)})).sort((a,b) => a.box.x - b.box.x);
+            const minX = boxes[0].box.x;
+            const maxX = boxes[boxes.length-1].box.x;
+            const step = (maxX - minX) / (boxes.length - 1);
+
+            boxes.forEach((b, i) => {
+                if (i === 0 || i === boxes.length - 1) return; // Don't move end elements
+                const targetX = minX + (step * i);
+                const dx = targetX - b.box.x;
+                if(dx !== 0) setTransformTranslate(b.el, dx, 0);
+            });
+            updateEditorFromPreview();
+        });
+
+        document.getElementById('ecpDistVertBtn')?.addEventListener('click', () => {
+            if (selectedElements.length < 3) return;
+            const boxes = selectedElements.map(el => ({el, box: getScreenBox(el)})).sort((a,b) => a.box.y - b.box.y);
+            const minY = boxes[0].box.y;
+            const maxY = boxes[boxes.length-1].box.y;
+            const step = (maxY - minY) / (boxes.length - 1);
+
+            boxes.forEach((b, i) => {
+                if (i === 0 || i === boxes.length - 1) return; // Don't move end elements
+                const targetY = minY + (step * i);
+                const dy = targetY - b.box.y;
+                if(dy !== 0) setTransformTranslate(b.el, 0, dy);
+            });
+            updateEditorFromPreview();
+        });
+
+
         // --- ECP Event Listeners ---
         ecpCloseBtn.addEventListener('click', deselectElement);
 
         ecpOpacity.addEventListener('input', () => {
-            if (!selectedElement) return;
+            if (selectedElements.length === 0) return;
             const val = ecpOpacity.value;
             ecpOpacityVal.textContent = parseFloat(val).toFixed(2);
-            selectedElement.setAttribute('opacity', val);
+            selectedElements.forEach(el => el.setAttribute('opacity', val));
         });
         ecpOpacity.addEventListener('change', () => {
-            if (!selectedElement) return;
+            if (selectedElements.length === 0) return;
             updateEditorFromPreview();
         });
 
         ecpFill.addEventListener('change', () => {
-            if (!selectedElement) return;
-            selectedElement.setAttribute('fill', ecpFill.value);
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => el.setAttribute('fill', ecpFill.value));
             updateEditorFromPreview();
             showToast(`Fill → ${ecpFill.value}`);
         });
 
         ecpStroke.addEventListener('change', () => {
-            if (!selectedElement) return;
-            selectedElement.setAttribute('stroke', ecpStroke.value);
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => el.setAttribute('stroke', ecpStroke.value));
             updateEditorFromPreview();
             showToast(`Stroke → ${ecpStroke.value}`);
         });
 
         ecpStrokeWidth.addEventListener('change', () => {
-            if (!selectedElement) return;
-            selectedElement.setAttribute('stroke-width', ecpStrokeWidth.value);
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => el.setAttribute('stroke-width', ecpStrokeWidth.value));
             updateEditorFromPreview();
         });
 
         // --- Text Control Event Listeners ---
         ecpTextContent.addEventListener('input', (e) => {
-            if (!selectedElement) return;
-
-            if (selectedElement.tagName.toLowerCase() === 'textpath' || selectedElement.tagName.toLowerCase() === 'tspan') {
-                selectedElement.textContent = e.target.value;
-            } else {
-                const innerTp = selectedElement.querySelector('textPath, tspan');
-                if (innerTp) {
-                    innerTp.textContent = e.target.value;
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => {
+                if (el.tagName.toLowerCase() === 'textpath' || el.tagName.toLowerCase() === 'tspan') {
+                    el.textContent = e.target.value;
                 } else {
-                    selectedElement.textContent = e.target.value;
+                    const innerTp = el.querySelector('textPath, tspan');
+                    if (innerTp) {
+                        innerTp.textContent = e.target.value;
+                    } else {
+                        el.textContent = e.target.value;
+                    }
                 }
-            }
+            });
         });
         ecpTextContent.addEventListener('change', () => {
-            if (!selectedElement) return;
+            if (selectedElements.length === 0) return;
             updateEditorFromPreview();
         });
 
         ['ecpFontFamily', 'ecpFontSize', 'ecpFontWeight', 'ecpLetterSpacing'].forEach(id => {
             document.getElementById(id).addEventListener('change', (e) => {
-                if (!selectedElement) return;
+                if (selectedElements.length === 0) return;
                 const attr = e.target.id.replace('ecp', '').replace(/([A-Z])/g, '-$1').toLowerCase().substring(1);
                 const val = e.target.value + (e.target.id === 'ecpLetterSpacing' ? 'px' : '');
-                selectedElement.setAttribute(attr, val);
+                selectedElements.forEach(el => el.setAttribute(attr, val));
                 updateEditorFromPreview();
             });
         });
@@ -5203,26 +5646,26 @@
         }
 
         ecpTextWarp.addEventListener('change', () => {
-            if (!selectedElement) return;
+            if (selectedElements.length === 0) return;
+            const el = selectedElements[0]; // Only apply warp to first selected for now
             const warpType = ecpTextWarp.value;
             const textContent = ecpTextContent.value;
 
             if (warpType === 'none') {
-                if (selectedElement.tagName.toLowerCase() === 'textpath') {
-                    // It's a textPath inside a text element
-                    const parentText = selectedElement.parentNode;
+                if (el.tagName.toLowerCase() === 'textpath') {
+                    const parentText = el.parentNode;
                     parentText.innerHTML = textContent;
-                    selectElement(parentText); // re-select the text element
-                } else if (selectedElement.tagName.toLowerCase() === 'text') {
-                    selectedElement.innerHTML = textContent;
+                    selectElement(parentText, false);
+                } else if (el.tagName.toLowerCase() === 'text') {
+                    el.innerHTML = textContent;
                 }
             } else {
                 ensureTextWarpDefs();
                 const pathId = warpType === 'circle' ? '#textWarpCircle' : warpType === 'wave' ? '#textWarpWave' : '#textWarpArch';
 
-                let targetTextEl = selectedElement;
-                if (selectedElement.tagName.toLowerCase() === 'textpath') {
-                    targetTextEl = selectedElement.parentNode;
+                let targetTextEl = el;
+                if (el.tagName.toLowerCase() === 'textpath') {
+                    targetTextEl = el.parentNode;
                 }
 
                 targetTextEl.innerHTML = '';
@@ -5233,37 +5676,135 @@
                 tp.textContent = textContent;
                 targetTextEl.appendChild(tp);
 
-                selectElement(tp); // select the new textPath
+                selectElement(tp, false);
             }
             updateEditorFromPreview();
         });
 
         ecpDeleteBtn.addEventListener('click', () => {
-            if (!selectedElement) return;
-            selectedElement.remove();
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => el.remove());
             deselectElement();
             updateEditorFromPreview();
-            showToast('Element deleted');
+            showToast('Elements deleted');
         });
 
         ecpStripAnimBtn.addEventListener('click', () => {
-            if (!selectedElement) return;
-            // Remove SMIL
-            selectedElement.querySelectorAll('animate, animateTransform, animateMotion, set').forEach(a => a.remove());
-            // Remove CSS animation classes
-            Array.from(selectedElement.classList).filter(c => c.startsWith('anim-')).forEach(c => selectedElement.classList.remove(c));
-            selectedElement.style.animation = '';
-            // Remove filter
-            selectedElement.removeAttribute('filter');
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => {
+                el.querySelectorAll('animate, animateTransform, animateMotion, set').forEach(a => a.remove());
+                Array.from(el.classList).filter(c => c.startsWith('anim-')).forEach(c => el.classList.remove(c));
+                el.style.animation = '';
+                el.removeAttribute('filter');
+            });
             updateEditorFromPreview();
-            populateAnimList(selectedElement);
-            showToast('Animations stripped from element');
+            populateAnimList(selectedElements[0]);
+            showToast('Animations stripped');
+        });
+
+        // --- Motion Path Binding Logic ---
+        const ecpBindPathBtn = document.getElementById('ecpBindPathBtn');
+        let isBindingPath = false;
+        let pathBindTarget = null;
+
+        const originalUpdateECP2 = updateECP;
+        updateECP = function() {
+            originalUpdateECP2();
+            if (selectedElements.length === 1 && selectedElements[0].tagName.toLowerCase() !== 'path' && selectedElements[0].tagName.toLowerCase() !== 'svg' && selectedElements[0].tagName.toLowerCase() !== 'defs' && selectedElements[0].tagName.toLowerCase() !== 'style') {
+                if(ecpBindPathBtn) ecpBindPathBtn.style.display = 'block';
+            } else {
+                if(ecpBindPathBtn) ecpBindPathBtn.style.display = 'none';
+            }
+        };
+
+        ecpBindPathBtn?.addEventListener('click', () => {
+            if (selectedElements.length !== 1) return;
+            isBindingPath = true;
+            pathBindTarget = selectedElements[0];
+            ecpBindPathBtn.textContent = 'Select a Path...';
+            ecpBindPathBtn.style.backgroundColor = 'rgba(229, 255, 0, 0.2)';
+            svgPreviewContainer.style.cursor = 'crosshair';
+            showToast('Click a path on the canvas to bind motion');
         });
 
         // --- Click-to-Select in Preview ---
         svgPreviewContainer.addEventListener('click', (e) => {
+            if (isBindingPath) {
+                // We are looking for a path
+                let target = e.target;
+                while (target && target !== svgTransformWrapper.querySelector('svg')) {
+                    if (target.tagName?.toLowerCase() === 'path') {
+                        // Found a path!
+                        isBindingPath = false;
+                        svgPreviewContainer.style.cursor = '';
+                        ecpBindPathBtn.textContent = '〰 Bind to Path';
+                        ecpBindPathBtn.style.backgroundColor = '';
+
+                        // Ensure path and target have IDs
+                        let needsSync = false;
+                        if (!target.id) {
+                            target.id = 'path-' + Math.random().toString(36).substr(2, 6);
+                            needsSync = true;
+                        }
+                        const pathId = target.id;
+
+                        if (!pathBindTarget.id) {
+                            pathBindTarget.id = 'motion-target-' + Math.random().toString(36).substr(2, 6);
+                            needsSync = true;
+                        }
+                        const targetId = pathBindTarget.id;
+
+                        // Sync DOM IDs back to editor BEFORE parsing so we can find them reliably
+                        if (needsSync) {
+                            updateEditorFromPreview();
+                        }
+
+                        // Inject animateMotion
+                        const doc = new DOMParser().parseFromString(editor.getValue(), "image/svg+xml");
+
+                        const targetInDoc = doc.getElementById(targetId) || doc.querySelector('[id="' + targetId + '"]');
+
+                        if (targetInDoc) {
+                            const animMotion = doc.createElementNS("http://www.w3.org/2000/svg", "animateMotion");
+                            animMotion.setAttribute("dur", "5s");
+                            animMotion.setAttribute("repeatCount", "indefinite");
+                            // Ensure the object follows the path tangentially
+                            // Note: GSAP motionPath autoRotate handles this in the preview, but good for raw SVG too
+
+                            const mpath = doc.createElementNS("http://www.w3.org/2000/svg", "mpath");
+                            mpath.setAttribute("href", "#" + pathId);
+                            animMotion.appendChild(mpath);
+
+                            targetInDoc.appendChild(animMotion);
+
+                            // To prevent double translation issues if the element already has a transform,
+                            // it's usually best to zero out its cx/cy or x/y if it's a simple shape,
+                            // but we'll let the user manage that. We will clear translation if it exists.
+
+                            editor.setValue(formatXML(new XMLSerializer().serializeToString(doc)));
+                            showToast('Motion Path bound!');
+                        } else {
+                            // If sync failed, just force a sync
+                            updateEditorFromPreview();
+                            showToast('Binding failed, please try again.', true);
+                        }
+
+                        return;
+                    }
+                    target = target.parentElement;
+                }
+
+                // Clicked somewhere else, cancel binding
+                isBindingPath = false;
+                svgPreviewContainer.style.cursor = '';
+                ecpBindPathBtn.textContent = '〰 Bind to Path';
+                ecpBindPathBtn.style.backgroundColor = '';
+                showToast('Path binding cancelled');
+                return;
+            }
+
             // Ignore clicks on control panel, zoom controls, and buttons
-            if (e.target.closest('#elControlPanel') || e.target.closest('.zoom-controls') || e.target.closest('button')) return;
+            if (e.target.closest('#elControlPanel') || e.target.closest('.zoom-controls') || e.target.closest('button') || e.target.closest('.marquee-box')) return;
 
             const svgRoot = svgTransformWrapper.querySelector('svg');
             if (!svgRoot) return;
@@ -5280,20 +5821,20 @@
                         target = target.parentElement;
                         continue;
                     }
-                    selectElement(target);
+                    selectElement(target, e.shiftKey);
                     e.stopPropagation();
                     return;
                 }
                 target = target.parentElement;
             }
 
-            // Clicked on empty space or SVG root → deselect
-            deselectElement();
+            // Clicked on empty space or SVG root → deselect if not shifting (handled by marquee start mostly, but safe here)
+            if (!e.shiftKey) deselectElement();
         }, true);
 
         // Keyboard: Delete/Backspace to delete selected, Escape to deselect
         document.addEventListener('keydown', (e) => {
-            if (!selectedElement) return;
+            if (selectedElements.length === 0) return;
             // Don't intercept when typing in inputs
             if (e.target.closest('input, textarea, .CodeMirror')) return;
 
@@ -5502,7 +6043,7 @@
             ecpEditPathBtn.classList.toggle('active', isPathEditing);
             ecpEditPathBtn.textContent = isPathEditing ? '✓ Stop Editing Points' : '✎ Edit Path Points';
 
-            const activeEl = selectedElement;
+            const activeEl = selectedElements.length === 1 ? selectedElements[0] : null;
             if (isPathEditing && activeEl && activeEl.tagName.toLowerCase() === 'path') {
                 createPathHandles(activeEl);
             } else {
@@ -5812,6 +6353,105 @@
 
 
         // ═══ PERFORMANCE: rAF-Throttled Pan ═══
+
+        // ═══ MARQUEE SELECTION ═══
+        let isMarquee = false;
+        let marqueeStart = { x: 0, y: 0 };
+        let marqueeBox = document.createElement('div');
+        marqueeBox.className = 'marquee-box';
+        marqueeBox.style.position = 'absolute';
+        marqueeBox.style.border = '1px dashed #E5FF00';
+        marqueeBox.style.backgroundColor = 'rgba(229, 255, 0, 0.1)';
+        marqueeBox.style.pointerEvents = 'none';
+        marqueeBox.style.zIndex = '100';
+        marqueeBox.style.display = 'none';
+        svgPreviewContainer.appendChild(marqueeBox);
+
+        svgPreviewContainer.addEventListener('mousedown', (e) => {
+            // Only left click, and ignore if clicking on existing selected element unless shifting
+            if (e.button !== 0) return;
+            if (e.target.closest('#elControlPanel') || e.target.closest('.zoom-controls') || e.target.closest('button')) return;
+
+            // If we clicked directly on an unselected element, we let the click handler deal with it
+            // So we only start marquee if we click on empty space (the container, wrapper, or root svg)
+            const isCanvasBackground = e.target === svgPreviewContainer || e.target === svgTransformWrapper || e.target === svgTransformWrapper.querySelector('svg');
+
+            if (isCanvasBackground) {
+                isMarquee = true;
+                const rect = svgPreviewContainer.getBoundingClientRect();
+                marqueeStart.x = e.clientX - rect.left;
+                marqueeStart.y = e.clientY - rect.top;
+
+                marqueeBox.style.left = marqueeStart.x + 'px';
+                marqueeBox.style.top = marqueeStart.y + 'px';
+                marqueeBox.style.width = '0px';
+                marqueeBox.style.height = '0px';
+                marqueeBox.style.display = 'block';
+
+                if (!e.shiftKey) deselectElement();
+            }
+        });
+
+        svgPreviewContainer.addEventListener('mousemove', (e) => {
+            if (!isMarquee) return;
+            const rect = svgPreviewContainer.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+
+            const x = Math.min(marqueeStart.x, currentX);
+            const y = Math.min(marqueeStart.y, currentY);
+            const w = Math.abs(currentX - marqueeStart.x);
+            const h = Math.abs(currentY - marqueeStart.y);
+
+            marqueeBox.style.left = x + 'px';
+            marqueeBox.style.top = y + 'px';
+            marqueeBox.style.width = w + 'px';
+            marqueeBox.style.height = h + 'px';
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (!isMarquee) return;
+            isMarquee = false;
+            marqueeBox.style.display = 'none';
+
+            const mRect = marqueeBox.getBoundingClientRect();
+            // If the box is basically a click, do nothing
+            if (mRect.width < 5 && mRect.height < 5) return;
+
+            const svgRoot = svgTransformWrapper.querySelector('svg');
+            if (!svgRoot) return;
+
+            // Find all elements inside the marquee
+            const newSelections = [];
+            const walker = document.createTreeWalker(svgRoot, NodeFilter.SHOW_ELEMENT, null, false);
+            let node;
+            while (node = walker.nextNode()) {
+                const tag = node.tagName.toLowerCase();
+                if (selectableTagNames.has(tag) && tag !== 'g' && tag !== 'use' && tag !== 'clipPath') {
+                    // Quick check if element bounds intersect marquee
+                    const elRect = node.getBoundingClientRect();
+                    if (
+                        elRect.left < mRect.right &&
+                        elRect.right > mRect.left &&
+                        elRect.top < mRect.bottom &&
+                        elRect.bottom > mRect.top
+                    ) {
+                        newSelections.push(node);
+                    }
+                }
+            }
+
+            if (newSelections.length > 0) {
+                newSelections.forEach(el => {
+                    if (!selectedElements.includes(el)) {
+                        selectedElements.push(el);
+                        el.classList.add('el-selected');
+                    }
+                });
+                updateECP();
+            }
+        });
+
         let panRAF = null;
         const originalPanHandler = (e) => {
             if (!isPanning) return;
