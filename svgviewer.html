@@ -1190,15 +1190,20 @@
                             </div>
                         </div>
 
+
                         <div class="ecp-section-title">Animations</div>
                         <div id="ecpAnimList" style="display:flex;flex-direction:column;gap:4px;">
                             <span style="font-family:'Jura',monospace;font-size:10px;color:#555;">No animations</span>
                         </div>
 
                         <div style="display:flex;gap:6px;margin-top:4px;">
+                            <button id="ecpBindPathBtn" class="ecp-btn accent" style="flex:1; display:none;" title="Bind element to follow a path">〰 Bind to Path</button>
+                        </div>
+                        <div style="display:flex;gap:6px;margin-top:4px;">
                             <button id="ecpDeleteBtn" class="ecp-btn danger" style="flex:1;">✕ Delete Element</button>
                             <button id="ecpStripAnimBtn" class="ecp-btn accent" style="flex:1;">⊘ Strip Anims</button>
                         </div>
+
                         <div id="ecpPathSection" style="display:none; margin-top:8px;">
                             <button id="ecpEditPathBtn"
                                 class="w-full py-1.5 bg-accent/20 border border-accent/50 text-accent font-tech text-[10px] uppercase tracking-wider hover:bg-accent hover:text-bg transition-all">✎
@@ -2027,7 +2032,7 @@
             }
 
             function applyAnimationToElement(el, cls, idx = 0, total = 1) {
-                el.classList.add(cls);
+                if (cls) el.classList.add(cls);
                 if (applyStagger && total > 1) {
                     let staggerDelay = parseFloat(delay);
                     const staggerAmount = parseFloat(stagger);
@@ -5697,8 +5702,107 @@
             showToast('Animations stripped');
         });
 
+        // --- Motion Path Binding Logic ---
+        const ecpBindPathBtn = document.getElementById('ecpBindPathBtn');
+        let isBindingPath = false;
+        let pathBindTarget = null;
+
+        const originalUpdateECP2 = updateECP;
+        updateECP = function() {
+            originalUpdateECP2();
+            if (selectedElements.length === 1 && selectedElements[0].tagName.toLowerCase() !== 'path' && selectedElements[0].tagName.toLowerCase() !== 'svg' && selectedElements[0].tagName.toLowerCase() !== 'defs' && selectedElements[0].tagName.toLowerCase() !== 'style') {
+                if(ecpBindPathBtn) ecpBindPathBtn.style.display = 'block';
+            } else {
+                if(ecpBindPathBtn) ecpBindPathBtn.style.display = 'none';
+            }
+        };
+
+        ecpBindPathBtn?.addEventListener('click', () => {
+            if (selectedElements.length !== 1) return;
+            isBindingPath = true;
+            pathBindTarget = selectedElements[0];
+            ecpBindPathBtn.textContent = 'Select a Path...';
+            ecpBindPathBtn.style.backgroundColor = 'rgba(229, 255, 0, 0.2)';
+            svgPreviewContainer.style.cursor = 'crosshair';
+            showToast('Click a path on the canvas to bind motion');
+        });
+
         // --- Click-to-Select in Preview ---
         svgPreviewContainer.addEventListener('click', (e) => {
+            if (isBindingPath) {
+                // We are looking for a path
+                let target = e.target;
+                while (target && target !== svgTransformWrapper.querySelector('svg')) {
+                    if (target.tagName?.toLowerCase() === 'path') {
+                        // Found a path!
+                        isBindingPath = false;
+                        svgPreviewContainer.style.cursor = '';
+                        ecpBindPathBtn.textContent = '〰 Bind to Path';
+                        ecpBindPathBtn.style.backgroundColor = '';
+
+                        // Ensure path and target have IDs
+                        let needsSync = false;
+                        if (!target.id) {
+                            target.id = 'path-' + Math.random().toString(36).substr(2, 6);
+                            needsSync = true;
+                        }
+                        const pathId = target.id;
+
+                        if (!pathBindTarget.id) {
+                            pathBindTarget.id = 'motion-target-' + Math.random().toString(36).substr(2, 6);
+                            needsSync = true;
+                        }
+                        const targetId = pathBindTarget.id;
+
+                        // Sync DOM IDs back to editor BEFORE parsing so we can find them reliably
+                        if (needsSync) {
+                            updateEditorFromPreview();
+                        }
+
+                        // Inject animateMotion
+                        const doc = new DOMParser().parseFromString(editor.getValue(), "image/svg+xml");
+
+                        const targetInDoc = doc.getElementById(targetId) || doc.querySelector('[id="' + targetId + '"]');
+
+                        if (targetInDoc) {
+                            const animMotion = doc.createElementNS("http://www.w3.org/2000/svg", "animateMotion");
+                            animMotion.setAttribute("dur", "5s");
+                            animMotion.setAttribute("repeatCount", "indefinite");
+                            // Ensure the object follows the path tangentially
+                            // Note: GSAP motionPath autoRotate handles this in the preview, but good for raw SVG too
+
+                            const mpath = doc.createElementNS("http://www.w3.org/2000/svg", "mpath");
+                            mpath.setAttribute("href", "#" + pathId);
+                            animMotion.appendChild(mpath);
+
+                            targetInDoc.appendChild(animMotion);
+
+                            // To prevent double translation issues if the element already has a transform,
+                            // it's usually best to zero out its cx/cy or x/y if it's a simple shape,
+                            // but we'll let the user manage that. We will clear translation if it exists.
+
+                            editor.setValue(formatXML(new XMLSerializer().serializeToString(doc)));
+                            showToast('Motion Path bound!');
+                        } else {
+                            // If sync failed, just force a sync
+                            updateEditorFromPreview();
+                            showToast('Binding failed, please try again.', true);
+                        }
+
+                        return;
+                    }
+                    target = target.parentElement;
+                }
+
+                // Clicked somewhere else, cancel binding
+                isBindingPath = false;
+                svgPreviewContainer.style.cursor = '';
+                ecpBindPathBtn.textContent = '〰 Bind to Path';
+                ecpBindPathBtn.style.backgroundColor = '';
+                showToast('Path binding cancelled');
+                return;
+            }
+
             // Ignore clicks on control panel, zoom controls, and buttons
             if (e.target.closest('#elControlPanel') || e.target.closest('.zoom-controls') || e.target.closest('button') || e.target.closest('.marquee-box')) return;
 
