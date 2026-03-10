@@ -5535,20 +5535,31 @@
             const current = masterTimeline.time();
             tlTime.textContent = `${current.toFixed(1)}s / ${total.toFixed(1)}s`;
 
+            const svg = svgTransformWrapper.querySelector('svg');
+
+            // ═══ WAAPI (CSS Animations) Sync ═══
+            if (svg && typeof svg.getAnimations === 'function') {
+                const animations = svg.getAnimations({ subtree: true });
+                animations.forEach(anim => {
+                    anim.pause();
+                    // Sync WAAPI currentTime (ms) with GSAP masterTimeline.time() (s)
+                    anim.currentTime = masterTimeline.time() * 1000;
+                });
+            }
+
+            // ═══ SMIL Sync ═══
+            if (svg && typeof svg.setCurrentTime === 'function') {
+                try {
+                    svg.setCurrentTime(masterTimeline.time() % total);
+                } catch (e) { }
+            }
+
             if (masterTimeline.paused()) {
                 playIcon.classList.remove('hidden');
                 pauseIcon.classList.add('hidden');
             } else {
                 playIcon.classList.add('hidden');
                 pauseIcon.classList.remove('hidden');
-            }
-
-            // Sync with SVG SMIL
-            const svg = svgTransformWrapper.querySelector('svg');
-            if (svg && typeof svg.setCurrentTime === 'function') {
-                try {
-                    svg.setCurrentTime(masterTimeline.time() % total);
-                } catch (e) { }
             }
         }
 
@@ -5617,6 +5628,63 @@
             isScrubbing = false;
         });
 
+        // ═══ GSAP TRANSLATION ENGINE (Phase 3) ═══
+        function translateSMILToGSAP(svg) {
+            if (!svg) return;
+
+            const anims = svg.querySelectorAll('animate, animateTransform, animateMotion');
+            anims.forEach(anim => {
+                const targetId = anim.parentNode.id;
+                const target = targetId ? svg.getElementById(targetId) : anim.parentNode;
+                if (!target) return;
+
+                const attr = anim.getAttribute('attributeName');
+                const dur = parseFloat(anim.getAttribute('dur')) || 5;
+                const from = anim.getAttribute('from');
+                const to = anim.getAttribute('to');
+                const values = anim.getAttribute('values');
+                const repeatCount = anim.getAttribute('repeatCount');
+                const type = anim.getAttribute('type'); // for animateTransform
+
+                let gsapProps = {
+                    duration: dur,
+                    repeat: (repeatCount === 'indefinite') ? -1 : (parseInt(repeatCount) - 1 || 0),
+                    ease: "none"
+                };
+
+                let tween;
+
+                // Handle basic animate
+                if (anim.tagName === 'animate') {
+                    if (values) {
+                        const valArray = values.split(';').map(v => v.trim());
+                        tween = gsap.to(target, { ...gsapProps, [attr]: valArray });
+                    } else if (from !== null && to !== null) {
+                        tween = gsap.fromTo(target, { [attr]: from }, { ...gsapProps, [attr]: to });
+                    }
+                }
+                // Handle animateTransform
+                else if (anim.tagName === 'animateTransform') {
+                    const transformType = anim.getAttribute('attributeName') === 'transform' ? type : 'rotate';
+                    if (values) {
+                        const valArray = values.split(';').map(v => v.trim());
+                        tween = gsap.to(target, { ...gsapProps, [transformType]: valArray[valArray.length - 1] });
+                    } else if (from !== null && to !== null) {
+                        const parseTransform = (val) => parseFloat(val.split(' ')[0]);
+                        tween = gsap.fromTo(target, { [transformType]: parseTransform(from) }, { ...gsapProps, [transformType]: parseTransform(to) });
+                    }
+                }
+
+                // Add to masterTimeline (Phase 3 convergence)
+                if (tween) {
+                    masterTimeline.add(tween, 0);
+                }
+
+                // Cleanup: Strip SMIL to prevent double rendering
+                anim.remove();
+            });
+        }
+
         // Auto-rebuild timeline when SVG changes
         function rebuildMasterTimeline() {
             const svg = svgTransformWrapper.querySelector('svg');
@@ -5626,30 +5694,58 @@
             const prevProgress = masterTimeline.progress();
             const wasPlaying = !masterTimeline.paused();
 
-            // Find longest duration among animations
-            let maxDur = 5;
+            // ═══ ROBUST DURATION PARSING (Phase 2) ═══
+            let maxDur = 0;
+
+            // 1. Parse SMIL Animations (s, ms, time-lists)
             svg.querySelectorAll('animate, animateTransform, animateMotion').forEach(anim => {
-                const durStr = anim.getAttribute('dur');
-                if (durStr && durStr.endsWith('s')) {
-                    const d = parseFloat(durStr);
-                    if (d > maxDur) maxDur = d;
+                const durAttr = anim.getAttribute('dur');
+                if (durAttr) {
+                    const times = durAttr.split(';').map(t => t.trim());
+                    times.forEach(t => {
+                        let d = 0;
+                        if (t.endsWith('ms')) d = parseFloat(t) / 1000;
+                        else if (t.endsWith('s')) d = parseFloat(t);
+                        else if (!isNaN(parseFloat(t))) d = parseFloat(t); // Default to seconds
+                        if (d > maxDur) maxDur = d;
+                    });
                 }
             });
 
+            // 2. Parse WAAPI/CSS Animations
+            if (typeof svg.getAnimations === 'function') {
+                svg.getAnimations({ subtree: true }).forEach(anim => {
+                    const timing = anim.effect ? anim.effect.getComputedTiming() : null;
+                    if (timing && timing.duration !== 'auto' && timing.duration !== Infinity) {
+                        // duration is in ms, we need seconds
+                        const d = (timing.duration + (timing.delay || 0)) / 1000;
+                        if (d > maxDur) maxDur = d;
+                    }
+                });
+            }
+
+            // 3. Safe Fallback
+            if (maxDur <= 0 || !isFinite(maxDur)) maxDur = 5;
+
             masterTimeline.clear();
+
+            // ═══ GSAP TRANSLATION ENGINE (Phase 3) ═══
+            translateSMILToGSAP(svg);
+
+            // Background reference tween to set duration
             masterTimeline.to({}, { duration: maxDur, ease: "none" });
 
             // Restore state
             masterTimeline.progress(prevProgress);
             if (wasPlaying) {
                 masterTimeline.play();
-                svg.unpauseAnimations();
+                if (svg.unpauseAnimations) svg.unpauseAnimations();
             } else {
                 masterTimeline.pause();
-                svg.pauseAnimations();
+                if (svg.pauseAnimations) svg.pauseAnimations();
             }
 
-            svg.setCurrentTime(masterTimeline.time() % maxDur);
+            if (svg.setCurrentTime) svg.setCurrentTime(masterTimeline.time() % maxDur);
             updateTimelineUI();
         }
 
