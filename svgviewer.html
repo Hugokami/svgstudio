@@ -5779,28 +5779,25 @@
 
             masterTimeline.clear();
 
-            // ═══ GSAP TRANSLATION ENGINE (Phase 3) ═══
-            translateSMILToGSAP(svg);
-
-            // CRITICAL FIX 1: Strip original SMIL tags so they don't fight with GSAP (Phase 6)
-            svg.querySelectorAll('animate, animateTransform, animateMotion').forEach(el => el.remove());
-
-            // CRITICAL FIX 2: Trust GSAP's duration. Only add fallback if empty (Phase 6)
-            if (masterTimeline.duration() === 0) {
-                masterTimeline.to({}, { duration: maxDur, ease: "none" });
-            } else {
-                maxDur = masterTimeline.duration();
-            }
+            // Background reference tween to set duration
+            masterTimeline.to({}, { duration: maxDur, ease: "none" });
 
             // Restore state
             masterTimeline.progress(prevProgress);
             if (wasPlaying) {
                 masterTimeline.play();
+                if (svg.unpauseAnimations) svg.unpauseAnimations();
             } else {
                 masterTimeline.pause();
+                if (svg.pauseAnimations) svg.pauseAnimations();
             }
 
-            // CRITICAL FIX 3: Replace native SMIL control with WAAPI for CSS Keyframes (Phase 6)
+            // Sync Native SMIL Time
+            if (svg.setCurrentTime) {
+                svg.setCurrentTime(masterTimeline.time() % maxDur);
+            }
+
+            // Sync CSS Keyframes with WAAPI
             const currentMs = masterTimeline.time() * 1000;
             if (typeof svg.getAnimations === 'function') {
                 svg.getAnimations({ subtree: true }).forEach(anim => {
