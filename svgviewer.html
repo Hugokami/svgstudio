@@ -4670,28 +4670,43 @@
                 `;
                 card.addEventListener('click', () => {
                     const currentVal = editor.getValue();
-                    // Basic injection: if empty, set it. If not, try to insert inside the root SVG tags.
                     if (!currentVal.trim()) {
                         editor.setValue(formatXML(asset.code));
-                    } else if (asset.cat === 'motion') {
-                        // Injection logic for Motion Presets
-                        const selectedEl = svgTransformWrapper.querySelector('.interact-resizable, .interact-draggable');
-                        if (!selectedEl) {
-                            showToast('Select an element to animate', true);
-                            return;
-                        }
+                        return;
+                    }
 
-                        // We'll need to find the element in the editor code and insert the snippet
-                        // For a robust implementation, let's use a unique ID or just tell the user to use the UI
-                        // But let's try a simple string replacement if the element has an ID
-                        const elId = selectedEl.id;
-                        if (!elId) {
-                            showToast('Target element must have an ID', true);
-                            return;
-                        }
+                    // ═══ TARGET SELECTION (Phase 4: Global Fallback) ═══
+                    let selectedEl = svgTransformWrapper.querySelector('.interact-resizable, .interact-draggable');
+                    let isGlobal = false;
 
+                    if (!selectedEl) {
+                        selectedEl = svgTransformWrapper.querySelector('svg');
+                        isGlobal = true;
+                        if (selectedEl && !selectedEl.id) {
+                            selectedEl.id = 'global-canvas';
+                            // Sync this ID back to the editor code later
+                        }
+                    }
+
+                    if (!selectedEl) {
+                        showToast('No SVG structure found to apply asset.', true);
+                        return;
+                    }
+
+                    const elId = selectedEl.id || (isGlobal ? 'global-canvas' : null);
+                    if (!elId) {
+                        showToast('Target element must have an ID', true);
+                        return;
+                    }
+
+                    // Ensure the ID exists in the code if we just assigned it
+                    let codeToUpdate = currentVal;
+                    if (isGlobal && !currentVal.includes(`id="${elId}"`)) {
+                        codeToUpdate = currentVal.replace('<svg', `<svg id="${elId}"`);
+                    }
+
+                    if (asset.cat === 'motion') {
                         let snippet = asset.snippet;
-                        // Replace placeholders if any
                         const bbox = selectedEl.getBBox();
                         snippet = snippet.replace(/\[CX\]/g, bbox.x + bbox.width / 2);
                         snippet = snippet.replace(/\[CY\]/g, bbox.y + bbox.height / 2);
@@ -4700,20 +4715,16 @@
                         snippet = snippet.replace(/\[Y+5\]/g, bbox.y + 5);
 
                         const tagMatch = new RegExp(`<[^>]+id=["']${elId}["'][^>]*>`, 'g');
-                        const fullTagMatch = currentVal.match(tagMatch);
+                        const fullTagMatch = codeToUpdate.match(tagMatch);
 
                         if (fullTagMatch) {
                             const originalTag = fullTagMatch[0];
                             let newTag = originalTag;
 
                             if (asset.name === 'Drawing Trace') {
-                                // Attributes version
                                 newTag = originalTag.replace('>', ' ' + snippet + '>');
                             } else {
-                                // Children version
-                                const closingBracketIndex = currentVal.indexOf('>', currentVal.indexOf(originalTag));
                                 const isSelfClosing = originalTag.endsWith('/>');
-
                                 if (isSelfClosing) {
                                     newTag = originalTag.replace('/>', '>') + `\n  ${snippet}\n</${selectedEl.tagName.toLowerCase()}>`;
                                 } else {
@@ -4721,26 +4732,19 @@
                                 }
                             }
 
-                            editor.setValue(formatXML(currentVal.replace(originalTag, newTag)));
-                            showToast(`Applied ${asset.name} to #${elId}`);
+                            editor.setValue(formatXML(codeToUpdate.replace(originalTag, newTag)));
+                            showToast(`Applied ${asset.name} ${isGlobal ? 'globally' : 'to #' + elId}`);
                         }
                     } else if (asset.cat === 'filters') {
-                        // Injection logic for Filter Presets
-                        const selectedEl = svgTransformWrapper.querySelector('.interact-resizable, .interact-draggable');
-                        if (!selectedEl) {
-                            showToast('Select an element to filter', true);
-                            return;
-                        }
-
-                        const elId = selectedEl.id;
-                        if (!elId) {
-                            showToast('Target element must have an ID', true);
-                            return;
-                        }
-
-                        // 1. Add filter to <defs>
-                        const doc = new DOMParser().parseFromString(currentVal, "image/svg+xml");
+                        const doc = new DOMParser().parseFromString(codeToUpdate, "image/svg+xml");
                         const svg = doc.querySelector('svg');
+                        const target = doc.getElementById(elId);
+
+                        if (!target) {
+                            showToast('Could not find target in code', true);
+                            return;
+                        }
+
                         let defs = svg.querySelector('defs');
                         if (!defs) {
                             defs = doc.createElementNS("http://www.w3.org/2000/svg", "defs");
