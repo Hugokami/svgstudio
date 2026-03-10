@@ -1,0 +1,21 @@
+*.zip
+*.py
+*.md
+.agents/
+.claude/
+.gemini/
+tools/
+fix_icons_data.py
+fix_icons_data_v2.py
+inject_assets.js
+frontenddesign.md
+IDEA GENERATION PROMPT (1).md
+skillbuilder.md
+video to design.md
+reference.md
+excalidraw-visuals.zip
+svgrepo-com (1).zip
+svgrepo-com.zip
+uxwing-com (1).zip
+uxwing-com.zip
+www.svgrepo.com-svg.zip

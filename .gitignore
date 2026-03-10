@@ -1,0 +1,12 @@
+.vercel
+*.zip
+assets_*.txt
+editor_*.txt
+landing_*.txt
+logic_*.txt
+top_*.txt
+findstr_results.txt
+test_file.txt
+fix_icons_data*.py
+node_modules
+.DS_Store
