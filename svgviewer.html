@@ -1788,7 +1788,12 @@
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = (e) => { editor.setValue(e.target.result); showToast('File loaded'); };
+            reader.onload = (e) => {
+                editor.setValue(e.target.result);
+                // Force an immediate preview and timeline rebuild for total replaces
+                updatePreview(e.target.result);
+                showToast('File loaded');
+            };
             reader.readAsText(file); fileInput.value = '';
         });
 
@@ -5643,12 +5648,14 @@
                 if (!target) return;
 
                 const attr = anim.getAttribute('attributeName');
-                const dur = parseFloat(anim.getAttribute('dur')) || 5;
+                const durAttr = anim.getAttribute('dur');
+                const dur = durAttr ? (durAttr.endsWith('ms') ? parseFloat(durAttr) / 1000 : parseFloat(durAttr)) : 5;
                 const from = anim.getAttribute('from');
                 const to = anim.getAttribute('to');
                 const values = anim.getAttribute('values');
                 const repeatCount = anim.getAttribute('repeatCount');
                 const type = anim.getAttribute('type'); // for animateTransform
+                const path = anim.getAttribute('path'); // for animateMotion
 
                 let gsapProps = {
                     duration: dur,
@@ -5669,17 +5676,42 @@
                 }
                 // Handle animateTransform
                 else if (anim.tagName === 'animateTransform') {
-                    const transformType = anim.getAttribute('attributeName') === 'transform' ? type : 'rotate';
+                    const transformType = attr === 'transform' ? type : 'rotate';
                     if (values) {
                         const valArray = values.split(';').map(v => v.trim());
+                        // Simple logic for values in transforms
                         tween = gsap.to(target, { ...gsapProps, [transformType]: valArray[valArray.length - 1] });
                     } else if (from !== null && to !== null) {
                         const parseTransform = (val) => parseFloat(val.split(' ')[0]);
                         tween = gsap.fromTo(target, { [transformType]: parseTransform(from) }, { ...gsapProps, [transformType]: parseTransform(to) });
                     }
                 }
+                // Handle animateMotion (Phase 5 addition)
+                else if (anim.tagName === 'animateMotion') {
+                    let motionSource = path;
+                    const mpath = anim.querySelector('mpath');
+                    if (mpath) {
+                        const href = mpath.getAttribute('href') || mpath.getAttribute('xlink:href');
+                        if (href) {
+                            const pathEl = svg.querySelector(href);
+                            if (pathEl) motionSource = pathEl;
+                        }
+                    }
 
-                // Add to masterTimeline (Phase 3 convergence)
+                    if (motionSource) {
+                        tween = gsap.to(target, {
+                            ...gsapProps,
+                            motionPath: {
+                                path: motionSource,
+                                align: motionSource,
+                                alignOrigin: [0.5, 0.5],
+                                autoRotate: true
+                            }
+                        });
+                    }
+                }
+
+                // Add to masterTimeline
                 if (tween) {
                     masterTimeline.add(tween, 0);
                 }

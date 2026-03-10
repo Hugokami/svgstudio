@@ -10,3 +10,4 @@ test_file.txt
 fix_icons_data*.py
 node_modules
 .DS_Store
+.env*.local
