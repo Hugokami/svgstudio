@@ -1,0 +1,39 @@
+﻿node.exe : Retrieving 
+projectÔÇª
+At line:1 char:1
++ & "C:\Program 
+Files\nodejs/node.exe" "C:\
+Users\lyan1\AppData\Roaming
+\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (Ret  
+  rieving projectÔÇª:Str   
+ ing) [], RemoteExcepti    
+on
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+Deploying hugokamis-project
+s/svg-studio-v2
+Uploading 
+[--------------------] 
+(0.0B/448B)
+Uploading 
+[====================] 
+(448.0B/448B)
+Inspect: https://vercel.com
+/hugokamis-projects/svg-stu
+dio-v2/GjTqvEq77b78jNGsskB3
+FuTESpJp [3s]
+Production: https://svg-stu
+dio-v2-gj5r6oayb-hugokamis-
+projects.vercel.app [3s]
+Building...
+Error: The Deployment was 
+blocked because there was 
+no git user associated 
+with the commit.
+https://svg-studio-v2-gj5r6oayb-hugokamis-projects.vercel.app

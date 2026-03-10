@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -1417,7 +1417,7 @@
             </div>
             <div
                 class="flex-1 overflow-y-auto p-6 prose prose-invert max-w-none font-sans text-sm leading-relaxed text-gray-300">
-                <h3 class="text-accent uppercase tracking-widest font-display text-base mb-4">Mastering SVG Studio V2.0
+                <h3 class="text-accent uppercase tracking-widest font-display text-base mb-4">Mastering SVG Studio V3.2
                 </h3>
                 <p>Welcome to the ultimate vector environment. SVG Studio is designed for high-performance editing,
                     AI-assisted creation, and professional motion design. Here’s your complete operational manual:</p>
@@ -1428,7 +1428,7 @@
                         <h4 class="text-accent font-tech uppercase tracking-widest text-xs mb-2">✦ AI Assistance &
                             Generation</h4>
                         <p class="mb-2">Use the <span class="text-accent">✦ AI ASSIST</span> panel to generate SVGs from
-                            natural language. Our <strong>Gemini 3.1 Flash</strong> engine is optimized for raw XML
+                            natural language. Our <strong>Gemini 2.5 Flash</strong> engine is optimized for raw XML
                             output.</p>
                         <ul class="list-disc list-inside space-y-1 text-muted">
                             <li><strong>Explain Code:</strong> Highlight code or click 'Explain' to get a structural
@@ -2358,7 +2358,7 @@
         async function callGeminiAPI(prompt, systemInstruction = null) {
             const defaultKey = "AIzaSyD7IfowvAeVP_spwy-I648KXpdws_RYLeA";
             const apiKey = localStorage.getItem('userGeminiApiKey') || defaultKey;
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash:generateContent?key=${apiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
             const payload = { contents: [{ parts: [{ text: prompt }] }] };
             if (systemInstruction) payload.systemInstruction = { parts: [{ text: systemInstruction }] };
 
