@@ -1145,7 +1145,19 @@
 
                         <!-- Text Controls (Hidden by default) -->
                         <div id="ecpTextSection" style="display: none;">
-                            <div class="ecp-section-title" style="margin-top: 8px;">Text Content</div>
+
+                        <!-- Gradient Editor (Hidden by default) -->
+                        <div id="ecpGradientSection" style="display: none;">
+                            <div class="ecp-section-title" style="margin-top: 8px;">Gradient Editor <span id="gradTypeBadge" style="float:right; color:#E5FF00; font-size:8px;">LINEAR</span></div>
+                            <div id="gradientStopsContainer" style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
+                                <!-- Stops injected here -->
+                            </div>
+                            <button id="ecpAddStopBtn" class="ecp-btn" style="width: 100%; margin-top: 4px;">+ Add Stop</button>
+                            <button id="ecpToggleGradHandlesBtn" class="ecp-btn" style="width: 100%; margin-top: 4px;">Toggle Canvas Handles</button>
+                        </div>
+
+                        <div class="ecp-section-title" style="margin-top: 8px;">Text Content</div>
+
                             <textarea id="ecpTextContent" class="ecp-input" rows="2" placeholder="Enter text..."
                                 style="width: 100%; height: auto; padding: 4px; resize: vertical; margin-bottom: 4px; border: 1px solid #555; background: #0d0d0d; color: #fff;"></textarea>
 
@@ -5182,12 +5194,37 @@
             const safeFill = fill || firstEl.getAttribute('fill') || '';
             const safeStroke = stroke || firstEl.getAttribute('stroke') || '';
 
-            ecpFill.value = safeFill && safeFill !== 'none' && safeFill.startsWith('#') ? normalizeToHex(safeFill) : '#000000';
-            ecpStroke.value = safeStroke && safeStroke !== 'none' && safeStroke.startsWith('#') ? normalizeToHex(safeStroke) : '#E5FF00';
+            ecpFill.value = safeFill && safeFill !== 'none' && safeFill.startsWith('#') ? normalizeToHex(safeFill) : (safeFill.startsWith('url') ? '#555555' : '#000000');
+            ecpStroke.value = safeStroke && safeStroke !== 'none' && safeStroke.startsWith('#') ? normalizeToHex(safeStroke) : (safeStroke.startsWith('url') ? '#555555' : '#E5FF00');
             ecpStrokeWidth.value = sw !== null ? (sw || '1') : '';
             if (sw === null) ecpStrokeWidth.placeholder = 'MIX'; else ecpStrokeWidth.placeholder = '';
 
             // Text Controls Visibility
+
+            // Gradient Editor Detection
+            const gradSection = document.getElementById('ecpGradientSection');
+            const stopsContainer = document.getElementById('gradientStopsContainer');
+            const gradTypeBadge = document.getElementById('gradTypeBadge');
+            let activeGradientNode = null;
+
+            // Check if safeFill or safeStroke is a url() to a gradient
+            const checkUrl = safeFill.match(/url\(#([^)]+)\)/) || safeStroke.match(/url\(#([^)]+)\)/);
+            if (checkUrl && !isMulti) {
+                const gradId = checkUrl[1];
+                const svgNode = svgTransformWrapper.querySelector('svg');
+                activeGradientNode = svgNode.querySelector(`#${gradId}`);
+
+                if (activeGradientNode && (activeGradientNode.tagName === 'linearGradient' || activeGradientNode.tagName === 'radialGradient')) {
+                    gradSection.style.display = 'block';
+                    gradTypeBadge.textContent = activeGradientNode.tagName === 'linearGradient' ? 'LINEAR' : 'RADIAL';
+                    renderGradientStops(activeGradientNode, stopsContainer);
+                } else {
+                    gradSection.style.display = 'none';
+                }
+            } else {
+                gradSection.style.display = 'none';
+            }
+
             const allText = selectedElements.every(el => el.tagName.toLowerCase() === 'text' || el.tagName.toLowerCase() === 'textpath');
             if (allText) {
                 ecpTextSection.style.display = 'block';
@@ -5390,6 +5427,182 @@
                 newInstances.forEach(el => selectElement(el, true));
                 updateEditorFromPreview();
                 showToast(`Duplicated ${newInstances.length} instance(s)`);
+            }
+        });
+
+
+        // --- Gradient Editor Logic ---
+        let activeGradientRef = null;
+
+        function normalizeToHex(color) {
+            // Simplified fallback for ECP color inputs which expect #RRGGBB
+            if (!color) return '#000000';
+            if (color.startsWith('#')) {
+                if (color.length === 4) {
+                    return '#' + color[1]+color[1] + color[2]+color[2] + color[3]+color[3];
+                }
+                return color.substring(0, 7);
+            }
+            // Add a canvas hack to convert named colors if needed, but #000000 is safe fallback
+            return '#000000';
+        }
+
+        function renderGradientStops(gradNode, container) {
+            activeGradientRef = gradNode;
+            container.innerHTML = '';
+            const stops = Array.from(gradNode.querySelectorAll('stop'));
+
+            stops.forEach((stop, idx) => {
+                const row = document.createElement('div');
+                row.className = 'ecp-row';
+
+                let offsetVal = stop.getAttribute('offset') || '0%';
+                if (offsetVal.endsWith('%')) offsetVal = parseFloat(offsetVal);
+                else offsetVal = parseFloat(offsetVal) * 100;
+
+                const colorVal = stop.getAttribute('stop-color') || '#000000';
+                const opacityVal = stop.getAttribute('stop-opacity') !== null ? parseFloat(stop.getAttribute('stop-opacity')) : 1;
+
+                row.innerHTML = `
+                    <span style="font-size:8px; color:#555; width:12px;">${idx+1}</span>
+                    <input type="number" class="ecp-input stop-offset" value="${offsetVal}" min="0" max="100" style="width:45px;" title="Offset %">
+                    <input type="color" class="ecp-input stop-color" value="${normalizeToHex(colorVal)}">
+                    <input type="range" class="ecp-input stop-opacity" min="0" max="1" step="0.05" value="${opacityVal}" style="width:40px;" title="Opacity">
+                    <button class="stop-del" style="background:none; border:none; color:#ef4444; cursor:pointer;">✕</button>
+                `;
+
+                // Event listeners for inputs
+                row.querySelector('.stop-offset').addEventListener('change', (e) => {
+                    stop.setAttribute('offset', e.target.value + '%');
+                    updateEditorFromPreview();
+                });
+                row.querySelector('.stop-color').addEventListener('input', (e) => {
+                    stop.setAttribute('stop-color', e.target.value);
+                    // Don't auto-sync on every input tick to prevent lag, just update DOM visually
+                });
+                row.querySelector('.stop-color').addEventListener('change', (e) => {
+                    stop.setAttribute('stop-color', e.target.value);
+                    updateEditorFromPreview();
+                });
+                row.querySelector('.stop-opacity').addEventListener('change', (e) => {
+                    stop.setAttribute('stop-opacity', e.target.value);
+                    updateEditorFromPreview();
+                });
+                row.querySelector('.stop-del').addEventListener('click', () => {
+                    if (stops.length > 1) {
+                        stop.remove();
+                        updateEditorFromPreview();
+                        renderGradientStops(gradNode, container);
+                    }
+                });
+
+                container.appendChild(row);
+            });
+        }
+
+        document.getElementById('ecpAddStopBtn')?.addEventListener('click', () => {
+            if (!activeGradientRef) return;
+            const newStop = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+            newStop.setAttribute("offset", "100%");
+            newStop.setAttribute("stop-color", "#E5FF00");
+            activeGradientRef.appendChild(newStop);
+            updateEditorFromPreview();
+            renderGradientStops(activeGradientRef, document.getElementById('gradientStopsContainer'));
+        });
+
+        // Toggle Gradient Handles on Canvas
+        let gradHandlesActive = false;
+        document.getElementById('ecpToggleGradHandlesBtn')?.addEventListener('click', () => {
+            if (!activeGradientRef) return;
+            gradHandlesActive = !gradHandlesActive;
+
+            const overlayId = 'gradHandlesOverlay';
+            let overlay = document.getElementById(overlayId);
+
+            if (!gradHandlesActive) {
+                if (overlay) overlay.remove();
+                return;
+            }
+
+            if (!overlay) {
+                overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                overlay.id = overlayId;
+                overlay.style.position = 'absolute';
+                overlay.style.top = '0';
+                overlay.style.left = '0';
+                overlay.style.width = '100%';
+                overlay.style.height = '100%';
+                overlay.style.pointerEvents = 'none';
+                overlay.style.overflow = 'visible';
+                svgTransformWrapper.appendChild(overlay);
+            }
+
+            overlay.innerHTML = '';
+            const svg = svgTransformWrapper.querySelector('svg');
+            const viewBox = svg.viewBox.baseVal || { x: 0, y: 0, width: 100, height: 100 };
+            overlay.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
+
+            // To render handles properly, we'd need to parse gradientUnits.
+            // For simplicity in this iteration, we just show a toast advising it's a WIP
+            // or we implement simple linear handles assuming userSpaceOnUse.
+            // Let's implement basic x1/y1 x2/y2 for linear
+            if (activeGradientRef.tagName === 'linearGradient') {
+                const getVal = (attr, def) => {
+                    let v = activeGradientRef.getAttribute(attr);
+                    if (!v) return def;
+                    if (v.endsWith('%')) return (parseFloat(v)/100) * viewBox.width; // rough approx
+                    return parseFloat(v);
+                };
+
+                const points = [
+                    { name: 'x1', xAttr: 'x1', yAttr: 'y1', x: getVal('x1', 0), y: getVal('y1', 0) },
+                    { name: 'x2', xAttr: 'x2', yAttr: 'y2', x: getVal('x2', viewBox.width), y: getVal('y2', viewBox.height) }
+                ];
+
+                // Draw connecting line
+                const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                line.setAttribute('x1', points[0].x); line.setAttribute('y1', points[0].y);
+                line.setAttribute('x2', points[1].x); line.setAttribute('y2', points[1].y);
+                line.setAttribute('stroke', '#E5FF00'); line.setAttribute('stroke-dasharray', '2 2');
+                overlay.appendChild(line);
+
+                points.forEach(p => {
+                    const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                    circle.setAttribute('cx', p.x);
+                    circle.setAttribute('cy', p.y);
+                    circle.setAttribute('r', 4);
+                    circle.setAttribute('fill', '#E5FF00');
+                    circle.style.cursor = 'move';
+                    circle.style.pointerEvents = 'auto';
+                    circle.classList.add('grad-handle');
+                    overlay.appendChild(circle);
+
+                    interact(circle).draggable({
+                        inertia: false,
+                        onmove: (event) => {
+                            const target = event.target;
+                            const px = parseFloat(target.getAttribute('cx')) + event.dx / scale;
+                            const py = parseFloat(target.getAttribute('cy')) + event.dy / scale;
+
+                            target.setAttribute('cx', px);
+                            target.setAttribute('cy', py);
+
+                            if (p.name === 'x1') { line.setAttribute('x1', px); line.setAttribute('y1', py); }
+                            else { line.setAttribute('x2', px); line.setAttribute('y2', py); }
+
+                            // Make sure gradientUnits is userSpaceOnUse so handles map 1:1
+                            activeGradientRef.setAttribute('gradientUnits', 'userSpaceOnUse');
+                            activeGradientRef.setAttribute(p.xAttr, px);
+                            activeGradientRef.setAttribute(p.yAttr, py);
+                        },
+                        onend: () => {
+                            updateEditorFromPreview();
+                        }
+                    });
+                });
+            } else {
+                showToast('Canvas handles only support Linear Gradients currently.', true);
+                gradHandlesActive = false;
             }
         });
 
