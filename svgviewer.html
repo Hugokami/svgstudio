@@ -941,6 +941,25 @@
                                         class="w-full accent-accent bg-bg h-4 opacity-70 hover:opacity-100 transition-opacity">
                                 </div>
                             </div>
+                            <div class="flex gap-2">
+                                <div class="flex-1">
+                                    <label
+                                        class="block text-[10px] text-muted mb-1.5 uppercase tracking-wider font-tech">Stagger Amount (s)</label>
+                                    <input type="number" id="animStagger" value="0" min="0" step="0.05"
+                                        class="w-full bg-bg border border-border hover:border-accent/50 p-1.5 text-xs text-gray-200 outline-none transition-colors font-tech">
+                                </div>
+                                <div class="flex-1">
+                                    <label
+                                        class="block text-[10px] text-muted mb-1.5 uppercase tracking-wider font-tech">Stagger From</label>
+                                    <select id="animStaggerFrom"
+                                        class="w-full bg-bg border border-border hover:border-accent/50 p-1.5 text-xs text-gray-200 outline-none transition-colors font-tech">
+                                        <option value="start" selected>START</option>
+                                        <option value="end">END</option>
+                                        <option value="center">CENTER</option>
+                                        <option value="edges">EDGES</option>
+                                    </select>
+                                </div>
+                            </div>
                             <button id="applyCustomAnimBtn" class="btn-accent mt-1 w-full py-2">APPLY ANIMATION</button>
                         </div>
                     </div>
@@ -1889,10 +1908,12 @@
             const iteration = document.getElementById('animIteration').value || 'infinite';
             const origin = document.getElementById('animOrigin').value || 'center';
             const intensity = document.getElementById('animIntensity').value || '1';
-            applyCustomAnimation(type, duration, easing, direction, delay, iteration, origin, intensity);
+            const stagger = document.getElementById('animStagger').value || '0';
+            const staggerFrom = document.getElementById('animStaggerFrom').value || 'start';
+            applyCustomAnimation(type, duration, easing, direction, delay, iteration, origin, intensity, stagger, staggerFrom);
         });
 
-        function applyCustomAnimation(type, duration, easing, direction, delay, iteration, origin, intensity) {
+        function applyCustomAnimation(type, duration, easing, direction, delay, iteration, origin, intensity, stagger, staggerFrom) {
             animateDropdown.classList.add('hidden');
             const code = editor.getValue();
             const doc = new DOMParser().parseFromString(code, "image/svg+xml");
@@ -1907,8 +1928,43 @@
                 svg.insertBefore(style, svg.firstChild);
             }
 
+            // Check if there's a selected group we should apply stagger to
+            const applyStagger = parseFloat(stagger) > 0;
+            const selectedElementId = selectedElement ? selectedElement.id : null;
+            let staggerTargets = [];
+
+            // If a group is selected and stagger is requested, we animate its children
+            if (applyStagger && selectedElementId && selectedElement.tagName.toLowerCase() === 'g') {
+                const groupInDoc = doc.getElementById(selectedElementId);
+                if (groupInDoc) {
+                    staggerTargets = Array.from(groupInDoc.children).filter(c => c.tagName !== 'defs' && c.tagName !== 'style' && c.tagName !== 'title' && c.tagName !== 'desc');
+                }
+            } else if (applyStagger && !selectedElementId) {
+                // If stagger is requested but nothing is selected, stagger all root elements
+                staggerTargets = Array.from(svg.children).filter(c => c.tagName !== 'defs' && c.tagName !== 'style' && c.tagName !== 'metadata' && c.tagName !== 'title' && c.tagName !== 'desc');
+            }
+
             // Helper to wrap elements to preserve their own internal transforms
             function getWrapperGroup() {
+                // If we are staggering, we don't wrap, we apply directly to targets later
+                if (staggerTargets.length > 0) {
+                    return null;
+                }
+
+                // If a specific element is selected, wrap just that element
+                if (selectedElementId) {
+                    const elInDoc = doc.getElementById(selectedElementId);
+                    if (elInDoc) {
+                        let g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
+                        elInDoc.parentNode.insertBefore(g, elInDoc);
+                        g.appendChild(elInDoc);
+                        // Transfer ID to the wrapper so it remains selected conceptually?
+                        // Actually, it's safer to just wrap it and animate the wrapper.
+                        return g;
+                    }
+                }
+
+                // Default: wrap everything
                 let g = doc.createElementNS("http://www.w3.org/2000/svg", "g");
                 const children = Array.from(svg.childNodes);
                 children.forEach(child => {
@@ -1920,46 +1976,81 @@
                 return g;
             }
 
+            function applyAnimationToElement(el, cls, idx = 0, total = 1) {
+                el.classList.add(cls);
+                if (applyStagger && total > 1) {
+                    let staggerDelay = parseFloat(delay);
+                    const staggerAmount = parseFloat(stagger);
+                    if (staggerFrom === 'start') {
+                        staggerDelay += idx * staggerAmount;
+                    } else if (staggerFrom === 'end') {
+                        staggerDelay += (total - 1 - idx) * staggerAmount;
+                    } else if (staggerFrom === 'center') {
+                        const centerIdx = (total - 1) / 2;
+                        staggerDelay += Math.abs(idx - centerIdx) * staggerAmount;
+                    } else if (staggerFrom === 'edges') {
+                        const centerIdx = (total - 1) / 2;
+                        staggerDelay += (centerIdx - Math.abs(idx - centerIdx)) * staggerAmount;
+                    }
+                    // Apply inline style for specific delay
+                    el.style.animationDelay = `${staggerDelay}s`;
+                }
+            }
+
+
+            function applyClassToTargets(cls, additionalSetup = null) {
+                if (staggerTargets.length > 0) {
+                    staggerTargets.forEach((el, idx) => {
+                        if (additionalSetup) additionalSetup(el);
+                        applyAnimationToElement(el, cls, idx, staggerTargets.length);
+                    });
+                } else {
+                    const wrapper = getWrapperGroup();
+                    if (additionalSetup) additionalSetup(wrapper);
+                    applyAnimationToElement(wrapper, cls, 0, 1);
+                }
+            }
+
             const animProps = `${duration}s ${easing} ${delay}s ${iteration} ${direction}`;
             const originStyle = `transform-origin: ${origin}; transform-box: fill-box;`;
 
             if (type === 'spin') {
                 if (!style.textContent.includes('@keyframes spin')) style.textContent += `\n@keyframes spin { 100% { transform: rotate(360deg); } }`;
                 style.textContent += `\n.anim-spin { animation: spin ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-spin');
+                applyClassToTargets('anim-spin');
             } else if (type === 'pulse') {
                 const pScale = 1 + (0.05 * intensity);
                 if (!style.textContent.includes('@keyframes pulse')) style.textContent += `\n@keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(${pScale}); } }`;
                 style.textContent += `\n.anim-pulse { animation: pulse ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-pulse');
+                applyClassToTargets('anim-pulse');
             } else if (type === 'float') {
                 const fDist = 15 * intensity;
                 if (!style.textContent.includes('@keyframes float')) style.textContent += `\n@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-${fDist}px); } }`;
                 style.textContent += `\n.anim-float { animation: float ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-float');
+                applyClassToTargets('anim-float');
             } else if (type === 'shake') {
                 const sDist = 5 * intensity;
                 const sRot = 2 * intensity;
                 if (!style.textContent.includes('@keyframes shake')) style.textContent += `\n@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-${sDist}px) rotate(-${sRot}deg); } 75% { transform: translateX(${sDist}px) rotate(${sRot}deg); } }`;
                 style.textContent += `\n.anim-shake { animation: shake ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-shake');
+                applyClassToTargets('anim-shake');
             } else if (type === 'fade') {
                 if (!style.textContent.includes('@keyframes fade')) style.textContent += `\n@keyframes fade { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }`;
                 style.textContent += `\n.anim-fade { animation: fade ${animProps}; }\n`;
-                getWrapperGroup().classList.add('anim-fade');
+                applyClassToTargets('anim-fade');
             } else if (type === 'bounce') {
                 const bDist = 15 * intensity;
                 if (!style.textContent.includes('@keyframes bounce')) style.textContent += `\n@keyframes bounce { 0%, 100% { transform: translateY(0); animation-timing-function: cubic-bezier(0.8,0,1,1); } 50% { transform: translateY(-${bDist}%); animation-timing-function: cubic-bezier(0,0,0.2,1); } }`;
                 style.textContent += `\n.anim-bounce { animation: bounce ${animProps}; transform-origin: bottom center; transform-box: fill-box; }\n`;
-                getWrapperGroup().classList.add('anim-bounce');
+                applyClassToTargets('anim-bounce');
             } else if (type === 'orbit') {
                 const oDist = 20 * intensity;
                 if (!style.textContent.includes('@keyframes orbitAnim')) style.textContent += `\n@keyframes orbitAnim { 0% { transform: rotate(0deg) translateX(${oDist}px) rotate(0deg); } 100% { transform: rotate(360deg) translateX(${oDist}px) rotate(-360deg); } }`;
                 style.textContent += `\n.anim-orbit { animation: orbitAnim ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-orbit');
+                applyClassToTargets('anim-orbit');
             } else if (type.startsWith('draw') || type.startsWith('dash') || type.startsWith('adv-stroke')) {
                 const shapes = svg.querySelectorAll('path, circle, rect, polygon, polyline, ellipse, text, tspan, textPath');
-                shapes.forEach(shape => {
+                shapes.forEach((shape, idx) => {
                     shape.setAttribute('pathLength', '1'); // Normalize lengths
                     if (!shape.hasAttribute('stroke') && !shape.style.stroke) {
                         shape.setAttribute('stroke', '#E5FF00');
@@ -1978,35 +2069,35 @@
                     if (type === 'draw') {
                         if (!style.textContent.includes('@keyframes drawLine')) style.textContent += `\n@keyframes drawLine { to { stroke-dashoffset: 0; } }`;
                         style.textContent += `\n.anim-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: drawLine ${animProps}; }\n`;
-                        shape.classList.add('anim-draw');
+                        applyAnimationToElement(shape, 'anim-draw', idx, shapes.length);
                     } else if (type === 'draw-loop') {
                         if (!style.textContent.includes('@keyframes drawLoop')) style.textContent += `\n@keyframes drawLoop { 0% { stroke-dashoffset: 1; } 100% { stroke-dashoffset: 0; } }`;
                         style.textContent += `\n.anim-draw-loop { stroke-dasharray: 1; stroke-dashoffset: 1; animation: drawLoop ${animProps}; }\n`;
-                        shape.classList.add('anim-draw-loop');
+                        applyAnimationToElement(shape, 'anim-draw-loop', idx, shapes.length);
                     } else if (type === 'dash-march') {
                         if (!style.textContent.includes('@keyframes dashMarch')) style.textContent += `\n@keyframes dashMarch { to { stroke-dashoffset: -1; } }`;
                         style.textContent += `\n.anim-dash-march { stroke-dasharray: 0.05 0.05; animation: dashMarch ${animProps}; }\n`;
-                        shape.classList.add('anim-dash-march');
+                        applyAnimationToElement(shape, 'anim-dash-march', idx, shapes.length);
                     } else if (type === 'draw-erase') {
                         if (!style.textContent.includes('@keyframes drawErase')) style.textContent += `\n@keyframes drawErase { 0% { stroke-dashoffset: 1; } 50% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -1; } }`;
                         style.textContent += `\n.anim-draw-erase { stroke-dasharray: 1; stroke-dashoffset: 1; animation: drawErase ${animProps}; }\n`;
-                        shape.classList.add('anim-draw-erase');
+                        applyAnimationToElement(shape, 'anim-draw-erase', idx, shapes.length);
                     } else if (type === 'dash-flow') {
                         if (!style.textContent.includes('@keyframes dashFlow')) style.textContent += `\n@keyframes dashFlow { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -2; } }`;
                         style.textContent += `\n.anim-dash-flow { stroke-dasharray: 0.1 0.2 0.3 0.1; animation: dashFlow ${animProps}; stroke-linecap: round; }\n`;
-                        shape.classList.add('anim-dash-flow');
+                        applyAnimationToElement(shape, 'anim-dash-flow', idx, shapes.length);
                     } else if (type === 'adv-stroke-draw') {
                         if (!style.textContent.includes('@keyframes advStrokeDraw')) style.textContent += `\n@keyframes advStrokeDraw { to { stroke-dashoffset: 0; } }`;
                         style.textContent += `\n.anim-adv-stroke-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: advStrokeDraw ${animProps}; }\n`;
-                        shape.classList.add('anim-adv-stroke-draw');
+                        applyAnimationToElement(shape, 'anim-adv-stroke-draw', idx, shapes.length);
                     } else if (type === 'adv-stroke-beam') {
                         if (!style.textContent.includes('@keyframes advStrokeBeam')) style.textContent += `\n@keyframes advStrokeBeam { 0% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -2; } }`;
                         style.textContent += `\n.anim-adv-stroke-beam { stroke-dasharray: 0.1 0.9; animation: advStrokeBeam ${animProps}; stroke-linecap: round; }\n`;
-                        shape.classList.add('anim-adv-stroke-beam');
+                        applyAnimationToElement(shape, 'anim-adv-stroke-beam', idx, shapes.length);
                     } else if (type === 'adv-stroke-dash') {
                         if (!style.textContent.includes('@keyframes advStrokeDash')) style.textContent += `\n@keyframes advStrokeDash { to { stroke-dashoffset: -1; } }`;
                         style.textContent += `\n.anim-adv-stroke-dash { stroke-dasharray: 0.05 0.05; animation: advStrokeDash ${animProps}; }\n`;
-                        shape.classList.add('anim-adv-stroke-dash');
+                        applyAnimationToElement(shape, 'anim-adv-stroke-dash', idx, shapes.length);
                     }
                 });
             } else if (type === 'neon') {
@@ -2018,32 +2109,31 @@
                     filter.innerHTML = `<feGaussianBlur stdDeviation="${s1}" result="blur1" /><feGaussianBlur stdDeviation="${s2}" result="blur2" /><feGaussianBlur stdDeviation="${s3}" result="blur3" /><feMerge><feMergeNode in="blur3"/><feMergeNode in="blur2"/><feMergeNode in="blur1"/><feMergeNode in="SourceGraphic"/></feMerge>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('filter', 'url(#animNeonFilter)');
                 if (!style.textContent.includes('@keyframes neonPulse')) style.textContent += `\n@keyframes neonPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }`;
                 style.textContent += `\n.anim-neon-pulse { animation: neonPulse ${animProps}; }\n`;
-                wrapper.classList.add('anim-neon-pulse');
+                applyClassToTargets('anim-neon-pulse', el => el.setAttribute('filter', 'url(#animNeonFilter)'));
             } else if (type === 'cyber-sweep') {
                 if (!svg.querySelector('#cyberGrad')) {
                     const defs = doc.createElementNS("http://www.w3.org/2000/svg", "defs");
                     defs.innerHTML = `<linearGradient id="cyberGrad" x1="0%" y1="0%" x2="200%" y2="0%"><stop offset="0%" stop-color="#E5FF00" stop-opacity="0"/><stop offset="50%" stop-color="#E5FF00" stop-opacity="1"/><stop offset="100%" stop-color="#E5FF00" stop-opacity="0"/></linearGradient><mask id="cyberMask"><rect x="-100%" y="-100%" width="300%" height="300%" fill="url(#cyberGrad)"><animate attributeName="x" values="-100%;100%" dur="${duration}s" repeatCount="indefinite"/></rect></mask>`;
                     svg.insertBefore(defs, svg.firstChild);
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('mask', 'url(#cyberMask)');
-                wrapper.setAttribute('fill', '#E5FF00');
+                applyClassToTargets('', el => {
+                    el.setAttribute('mask', 'url(#cyberMask)');
+                    el.setAttribute('fill', '#E5FF00');
+                });
             } else if (type === 'rubberband') {
                 if (!style.textContent.includes('@keyframes rubberband')) style.textContent += `\n@keyframes rubberband { 0% { transform: scale3d(1,1,1); } 30% { transform: scale3d(1.25, 0.75, 1); } 40% { transform: scale3d(0.75, 1.25, 1); } 50% { transform: scale3d(1.15, 0.85, 1); } 65% { transform: scale3d(0.95, 1.05, 1); } 75% { transform: scale3d(1.05, 0.95, 1); } 100% { transform: scale3d(1, 1, 1); } }`;
                 style.textContent += `\n.anim-rubber { animation: rubberband ${animProps}; transform-origin: center; transform-box: fill-box; }\n`;
-                getWrapperGroup().classList.add('anim-rubber');
+                applyClassToTargets('anim-rubber');
             } else if (type === 'swing') {
                 if (!style.textContent.includes('@keyframes swing3d')) style.textContent += `\n@keyframes swing3d { 20% { transform: rotate3d(0, 0, 1, 15deg); } 40% { transform: rotate3d(0, 0, 1, -10deg); } 60% { transform: rotate3d(0, 0, 1, 5deg); } 80% { transform: rotate3d(0, 0, 1, -5deg); } 100% { transform: rotate3d(0, 0, 1, 0deg); } }`;
                 style.textContent += `\n.anim-swing { animation: swing3d ${animProps}; transform-origin: top center; transform-box: fill-box; }\n`;
-                getWrapperGroup().classList.add('anim-swing');
+                applyClassToTargets('anim-swing');
             } else if (type === 'glitch-shake') {
                 if (!style.textContent.includes('@keyframes glitchShake')) style.textContent += `\n@keyframes glitchShake { 0% { transform: translate(0) } 20% { transform: translate(-2px, 2px) } 40% { transform: translate(-2px, -2px) } 60% { transform: translate(2px, 2px) } 80% { transform: translate(2px, -2px) } 100% { transform: translate(0) } }`;
                 style.textContent += `\n.anim-glitch-shake { animation: glitchShake ${animProps}; }\n`;
-                getWrapperGroup().classList.add('anim-glitch-shake');
+                applyClassToTargets('anim-glitch-shake');
             } else if (type === 'glitch') {
                 // Add FeTurbulence Glitch Filter
                 if (!svg.querySelector('#animGlitchFilter')) {
@@ -2053,12 +2143,10 @@
                     filter.innerHTML = `<feTurbulence type="turbulence" baseFrequency="0.05" numOctaves="2" result="turbulence"><animate attributeName="baseFrequency" values="0.05;0.1;0.05" dur="0.2s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in2="turbulence" in="SourceGraphic" scale="${gScale}" xChannelSelector="R" yChannelSelector="G"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('filter', 'url(#animGlitchFilter)');
 
                 if (!style.textContent.includes('@keyframes glitchJitter')) style.textContent += `\n@keyframes glitchJitter { 0% { transform: translate(0); } 20% { transform: translate(-2px, 2px); } 40% { transform: translate(-2px, -2px); } 60% { transform: translate(2px, 2px); } 80% { transform: translate(2px, -2px); } 100% { transform: translate(0); } }`;
                 style.textContent += `\n.anim-glitch-jitter { animation: glitchJitter ${duration}s ${delay}s ${iteration} forwards; }\n`;
-                wrapper.classList.add('anim-glitch-jitter');
+                applyClassToTargets('anim-glitch-jitter', el => el.setAttribute('filter', 'url(#animGlitchFilter)'));
 
             } else if (type === 'gooey') {
                 // Add Gooey ColorMatrix Filter
@@ -2069,8 +2157,7 @@
                     filter.innerHTML = `<feGaussianBlur in="SourceGraphic" stdDeviation="${gBlur}" result="blur" /><feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" /><feBlend in="SourceGraphic" in2="goo" />`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('filter', 'url(#animGooeyFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#animGooeyFilter)'));
 
             } else if (type === 'path-morph') {
                 // VERY basic path morph implementation (finds the first path and adds a dummy morph)
@@ -2099,7 +2186,7 @@
                     filter.innerHTML = `<feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="3" result="noise"><animate attributeName="baseFrequency" values="0.01;0.015;0.01" dur="${duration}s" repeatCount="indefinite"/></feTurbulence><feColorMatrix type="hueRotate" values="0"><animate attributeName="values" from="0" to="360" dur="${duration}s" repeatCount="indefinite"/></feColorMatrix><feComponentTransfer><feFuncA type="linear" slope="0.8"/></feComponentTransfer><feBlend in="SourceGraphic" in2="noise" mode="screen"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#holoFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#holoFilter)'));
             } else if (type === 'crt') {
                 if (!svg.querySelector('#crtFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2107,7 +2194,7 @@
                     filter.innerHTML = `<feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="R" /><feOffset dx="3" dy="0" in="R" result="oR" /><feColorMatrix type="matrix" in="SourceGraphic" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="G" /><feOffset dx="-3" dy="0" in="G" result="oG" /><feColorMatrix type="matrix" in="SourceGraphic" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="B" /><feMerge><feMergeNode in="oR"/><feMergeNode in="oG"/><feMergeNode in="B"/></feMerge>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#crtFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#crtFilter)'));
             } else if (type === 'moshing') {
                 if (!svg.querySelector('#moshFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2115,7 +2202,7 @@
                     filter.innerHTML = `<feTurbulence type="fractalNoise" baseFrequency="0.001 0.5" numOctaves="1" result="warp"><animate attributeName="baseFrequency" values="0.001 0.5;0.1 0.05;0.001 0.5" dur="${duration}s" calcMode="discrete" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="warp" scale="30" xChannelSelector="R" yChannelSelector="G"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#moshFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#moshFilter)'));
             } else if (type === 'heatmap') {
                 if (!svg.querySelector('#heatFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2123,19 +2210,19 @@
                     filter.innerHTML = `<feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 0  0 0 0 0 0  -1 1 0 0 1" result="heat"/><feComponentTransfer in="heat"><feFuncR type="table" tableValues="0 0 1 1"/><feFuncG type="table" tableValues="0 0 0 1"/><feFuncB type="table" tableValues="1 0 0 0"/></feComponentTransfer>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#heatFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#heatFilter)'));
             } else if (type === 'strobe') {
                 if (!style.textContent.includes('@keyframes strobeFlash')) style.textContent += `\n@keyframes strobeFlash { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }`;
                 style.textContent += `\n.anim-strobe { animation: strobeFlash 0.1s infinite; }\n`;
-                getWrapperGroup().classList.add('anim-strobe');
+                applyClassToTargets('anim-strobe');
             } else if (type === 'dialup') {
                 if (!style.textContent.includes('@keyframes dialupReveal')) style.textContent += `\n@keyframes dialupReveal { 0% { clip-path: inset(0 100% 0 0); } 20% { clip-path: inset(0 80% 0 0); } 40% { clip-path: inset(0 40% 0 0); } 60% { clip-path: inset(0 40% 0 0); } 80% { clip-path: inset(0 10% 0 0); } 100% { clip-path: inset(0 0 0 0); } }`;
                 style.textContent += `\n.anim-dialup { animation: dialupReveal ${duration}s steps(5, end) forwards; }\n`;
-                getWrapperGroup().classList.add('anim-dialup');
+                applyClassToTargets('anim-dialup');
             } else if (type === 'magnetic') {
                 if (!style.textContent.includes('@keyframes magneticTilt')) style.textContent += `\n@keyframes magneticTilt { 0% { transform: perspective(400px) rotateX(10deg) rotateY(-20deg) scale(0.9); } 50% { transform: perspective(400px) rotateX(-10deg) rotateY(20deg) scale(1.1); filter: drop-shadow(-20px 20px 0px rgba(229, 255, 0, 0.2)); } 100% { transform: perspective(400px) rotateX(10deg) rotateY(-20deg) scale(0.9); } }`;
                 style.textContent += `\n.anim-magnetic { animation: magneticTilt ${animProps}; transform-style: preserve-3d; }\n`;
-                getWrapperGroup().classList.add('anim-magnetic');
+                applyClassToTargets('anim-magnetic');
             } else if (type === 'fluid-gradient') {
                 if (!svg.querySelector('#fluidGradFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2144,7 +2231,7 @@
                     filter.innerHTML = `<feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="3" result="warp"><animate attributeName="baseFrequency" values="0.015;0.03;0.015" dur="${duration}s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap xChannelSelector="R" yChannelSelector="G" scale="${fScale}" in="SourceGraphic" in2="warp"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#fluidGradFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#fluidGradFilter)'));
             } else if (type === 'motion-blur') {
                 if (!svg.querySelector('#motionBlurX')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2155,17 +2242,15 @@
                 }
                 if (!style.textContent.includes('@keyframes fastPan')) style.textContent += `\n@keyframes fastPan { 0% { transform: translateX(-100px); } 50% { transform: translateX(100px); } 100% { transform: translateX(-100px); } }`;
                 style.textContent += `\n.anim-motion-blur { animation: fastPan ${animProps}; ${originStyle} }\n`;
-                const g = getWrapperGroup();
-                g.classList.add('anim-motion-blur');
-                g.setAttribute('filter', 'url(#motionBlurX)');
+                applyClassToTargets('anim-motion-blur', el => el.setAttribute('filter', 'url(#motionBlurX)'));
             } else if (type === 'cine-fade') {
                 if (!style.textContent.includes('@keyframes cineFade')) style.textContent += `\n@keyframes cineFade { 0% { opacity: 0; transform: scale(0.9) translateY(20px); filter: blur(10px); } 30%, 70% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0px); } 100% { opacity: 0; transform: scale(1.05) translateY(-10px); filter: blur(10px); } }`;
                 style.textContent += `\n.anim-cine-fade { animation: cineFade ${duration}s cubic-bezier(0.25, 1, 0.5, 1) infinite; }\n`;
-                getWrapperGroup().classList.add('anim-cine-fade');
+                applyClassToTargets('anim-cine-fade');
             } else if (type === 'ae-wiggle') {
                 if (!style.textContent.includes('@keyframes wigglePath')) style.textContent += `\n@keyframes wigglePath { 0% { transform: translate(0px, 0px) rotate(0deg); } 20% { transform: translate(${Math.random() * 10 - 5}px, ${Math.random() * 10 - 5}px) rotate(${Math.random() * 4 - 2}deg); } 40% { transform: translate(${Math.random() * 10 - 5}px, ${Math.random() * 10 - 5}px) rotate(${Math.random() * 4 - 2}deg); } 60% { transform: translate(${Math.random() * 10 - 5}px, ${Math.random() * 10 - 5}px) rotate(${Math.random() * 4 - 2}deg); } 80% { transform: translate(${Math.random() * 10 - 5}px, ${Math.random() * 10 - 5}px) rotate(${Math.random() * 4 - 2}deg); } 100% { transform: translate(0px, 0px) rotate(0deg); } }`;
                 style.textContent += `\n.anim-wiggle { animation: wigglePath ${duration}s ease-in-out infinite; }\n`;
-                getWrapperGroup().classList.add('anim-wiggle');
+                applyClassToTargets('anim-wiggle');
             } else if (type === 'echo-trail') {
                 if (!svg.querySelector('#echoFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2179,7 +2264,7 @@
                 }
                 if (!style.textContent.includes('@keyframes echoMove')) style.textContent += `\n@keyframes echoMove { 0% { transform: translateX(0); } 50% { transform: translateX(50px); } 100% { transform: translateX(0); } }`;
                 style.textContent += `\n.anim-echo { animation: echoMove ${duration}s ease-in-out infinite; filter: url(#echoFilter); }\n`;
-                getWrapperGroup().classList.add('anim-echo');
+                applyClassToTargets('anim-echo');
             } else if (type === 'liquid') {
                 if (!svg.querySelector('#liquidFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2188,23 +2273,23 @@
                     filter.innerHTML = `<feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="3" result="noise"><animate attributeName="baseFrequency" values="0.02;0.05;0.02" dur="${duration}s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="noise" scale="${lScale}" xChannelSelector="R" yChannelSelector="B"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#liquidFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#liquidFilter)'));
             } else if (type === 'typewriter') {
                 if (!style.textContent.includes('@keyframes typewriter')) style.textContent += `\n@keyframes typewriter { 0% { clip-path: inset(0 100% 0 0); } 100% { clip-path: inset(0 0 0 0); } }`;
                 style.textContent += `\n.anim-typewriter { animation: typewriter ${duration}s ${delay}s steps(20) ${iteration} ${direction}; }\n`;
-                getWrapperGroup().classList.add('anim-typewriter');
+                applyClassToTargets('anim-typewriter');
             } else if (type === 'wipe-reveal') {
                 if (!style.textContent.includes('@keyframes wipeReveal')) style.textContent += `\n@keyframes wipeReveal { 0% { clip-path: polygon(0 0, 0 0, 0 100%, 0 100%); } 100% { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); } }`;
                 style.textContent += `\n.anim-wipe { animation: wipeReveal ${animProps}; }\n`;
-                getWrapperGroup().classList.add('anim-wipe');
+                applyClassToTargets('anim-wipe');
             } else if (type === 'flip-card') {
                 if (!style.textContent.includes('@keyframes flipCard')) style.textContent += `\n@keyframes flipCard { 0% { transform: perspective(600px) rotateY(0deg); } 50% { transform: perspective(600px) rotateY(180deg); } 100% { transform: perspective(600px) rotateY(360deg); } }`;
                 style.textContent += `\n.anim-flip { animation: flipCard ${animProps}; ${originStyle} transform-style: preserve-3d; }\n`;
-                getWrapperGroup().classList.add('anim-flip');
+                applyClassToTargets('anim-flip');
             } else if (type === 'jelly') {
                 if (!style.textContent.includes('@keyframes jellyWobble')) style.textContent += `\n@keyframes jellyWobble { 0% { transform: scale(1, 1); } 25% { transform: scale(0.9, 1.1); } 50% { transform: scale(1.1, 0.9); } 75% { transform: scale(0.95, 1.05); } 100% { transform: scale(1, 1); } }`;
                 style.textContent += `\n.anim-jelly { animation: jellyWobble ${animProps}; ${originStyle} }\n`;
-                getWrapperGroup().classList.add('anim-jelly');
+                applyClassToTargets('anim-jelly');
             } else if (type === 'scan-lines') {
                 if (!svg.querySelector('#scanlineFilter')) {
                     const defs = svg.querySelector('defs') || doc.createElementNS("http://www.w3.org/2000/svg", "defs");
@@ -2215,9 +2300,10 @@
                     filter.innerHTML = `<feFlood flood-color="#00ff41" flood-opacity="0.03" result="green"/><feBlend in="SourceGraphic" in2="green" mode="screen"/>`;
                     defs.appendChild(filter);
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('mask', 'url(#scanMask)');
-                wrapper.setAttribute('filter', 'url(#scanlineFilter)');
+                applyClassToTargets('', el => {
+                    el.setAttribute('mask', 'url(#scanMask)');
+                    el.setAttribute('filter', 'url(#scanlineFilter)');
+                });
             } else if (type === 'pixelate') {
                 if (!svg.querySelector('#pixelateFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2225,7 +2311,7 @@
                     filter.innerHTML = `<feMorphology operator="dilate" radius="0"><animate attributeName="radius" values="0;4;0" dur="${duration}s" repeatCount="indefinite"/></feMorphology>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#pixelateFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#pixelateFilter)'));
             } else if (type === 'color-cycle') {
                 if (!svg.querySelector('#colorCycleFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2234,7 +2320,7 @@
                     filter.innerHTML = `<feFlood flood-color="#ff0000" result="base"/><feComposite in="base" in2="SourceGraphic" operator="atop" result="colored"/><feColorMatrix in="colored" type="hueRotate" values="0"><animate attributeName="values" from="0" to="360" dur="${duration}s" repeatCount="indefinite"/></feColorMatrix>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#colorCycleFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#colorCycleFilter)'));
             } else if (type === 'spectrum-flow') {
                 if (!svg.querySelector('#spectrumGrad')) {
                     const defs = svg.querySelector('defs') || doc.createElementNS("http://www.w3.org/2000/svg", "defs");
@@ -2252,8 +2338,6 @@
                             </rect>
                         </mask>`;
                 }
-                const wrapper = getWrapperGroup();
-                wrapper.setAttribute('mask', 'url(#spectrumMask)');
                 // Create a colored overlay using feFlood + Composite so it applies to the shape
                 if (!svg.querySelector('#spectrumFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2261,7 +2345,10 @@
                     filter.innerHTML = `<feFlood flood-color="#ffffff" result="white"/><feComposite in="white" in2="SourceGraphic" operator="atop"/>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                wrapper.setAttribute('filter', 'url(#spectrumFilter)');
+                applyClassToTargets('', el => {
+                    el.setAttribute('mask', 'url(#spectrumMask)');
+                    el.setAttribute('filter', 'url(#spectrumFilter)');
+                });
             } else if (type === 'vortex-gradient') {
                 if (!svg.querySelector('#vortexGrad')) {
                     const defs = svg.querySelector('defs') || doc.createElementNS("http://www.w3.org/2000/svg", "defs");
@@ -2274,10 +2361,9 @@
                         </radialGradient>
                     `;
                 }
-                const wrapper = getWrapperGroup();
                 if (!style.textContent.includes('@keyframes vortexRotate')) style.textContent += `\n@keyframes vortexRotate { 0% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.2); } 100% { transform: rotate(360deg) scale(1); } }`;
                 style.textContent += `\n.anim-vortex { animation: vortexRotate ${duration}s linear infinite; transform-origin: center; transform-box: fill-box; fill: url(#vortexGrad) !important; }\n`;
-                wrapper.classList.add('anim-vortex');
+                applyClassToTargets('anim-vortex');
             } else if (type === 'antigravity-aura') {
                 if (!svg.querySelector('#auraFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2300,19 +2386,19 @@
                     `;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#auraFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#auraFilter)'));
             } else if (type === 'zoom-pulse') {
                 if (!style.textContent.includes('@keyframes zoomPulse')) style.textContent += `\n@keyframes zoomPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }`;
                 style.textContent += `\n.anim-zoom-pulse { animation: zoomPulse ${animProps}; transform-origin: center; transform-box: view-box; }\n`;
-                getWrapperGroup().classList.add('anim-zoom-pulse');
+                applyClassToTargets('anim-zoom-pulse');
             } else if (type === 'text-3d-circle') {
                 if (!style.textContent.includes('@keyframes text3DCircle')) style.textContent += `\n@keyframes text3DCircle { 0% { transform: perspective(800px) rotateX(60deg) rotateZ(0deg); } 100% { transform: perspective(800px) rotateX(60deg) rotateZ(360deg); } }`;
                 style.textContent += `\n.anim-text-3d { animation: text3DCircle ${duration}s linear infinite; transform-origin: center; transform-box: view-box; transform-style: preserve-3d; }\n`;
-                getWrapperGroup().classList.add('anim-text-3d');
+                applyClassToTargets('anim-text-3d');
             } else if (type === 'text-wave') {
                 if (!style.textContent.includes('@keyframes textWave')) style.textContent += `\n@keyframes textWave { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-10px) rotate(5deg); } }`;
                 style.textContent += `\n.anim-text-wave { animation: textWave ${duration}s ease-in-out infinite; transform-origin: center; transform-box: view-box; }\n`;
-                getWrapperGroup().classList.add('anim-text-wave');
+                applyClassToTargets('anim-text-wave');
             } else if (type === 'text-glitch') {
                 if (!svg.querySelector('#textGlitchFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2320,7 +2406,7 @@
                     filter.innerHTML = `<feColorMatrix type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="R" /><feOffset dx="-4" dy="0" in="R" result="oR"><animate attributeName="dx" values="-4;4;-2;6;-4" dur="${duration}s" repeatCount="indefinite" calcMode="discrete"/></feOffset><feColorMatrix type="matrix" in="SourceGraphic" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="B" /><feOffset dx="4" dy="0" in="B" result="oB"><animate attributeName="dx" values="4;-4;2;-6;4" dur="${duration}s" repeatCount="indefinite" calcMode="discrete"/></feOffset><feColorMatrix type="matrix" in="SourceGraphic" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="G" /><feMerge><feMergeNode in="oR"/><feMergeNode in="G"/><feMergeNode in="oB"/></feMerge>`;
                     svg.insertBefore(filter, svg.firstChild);
                 }
-                getWrapperGroup().setAttribute('filter', 'url(#textGlitchFilter)');
+                applyClassToTargets('', el => el.setAttribute('filter', 'url(#textGlitchFilter)'));
             }
 
             let newSvgString = new XMLSerializer().serializeToString(doc);
