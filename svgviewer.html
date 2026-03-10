@@ -1664,7 +1664,8 @@
         // Timeline State
         let isTimelineOpen = false;
         let masterTimeline = gsap.timeline({
-            paused: true,
+            paused: false,
+            repeat: -1,
             onUpdate: updateTimelineUI
         });
         let startX = 0;
