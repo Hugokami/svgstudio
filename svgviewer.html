@@ -650,7 +650,19 @@
             max-height: 100% !important;
             object-fit: contain !important;
             pointer-events: none !important;
-            filter: invert(0.9) brightness(1.2) !important;
+        }
+
+        /* Force asset preview colors to match the studio aesthetic without breaking original codes */
+        #assetsGrid svg path, #assetsGrid svg rect, #assetsGrid svg circle, #assetsGrid svg polygon, #assetsGrid svg polyline {
+            fill: currentColor !important;
+            stroke: currentColor !important;
+        }
+        #assetsGrid .asset-card {
+            color: #888;
+        }
+        #assetsGrid .asset-card:hover {
+            color: #E5FF00;
+            filter: drop-shadow(0 0 8px rgba(229, 255, 0, 0.4));
         }
     </style>
 </head>
@@ -891,7 +903,9 @@
                                         <option value="ease-in-out" selected>EASE-IO</option>
                                         <option value="ease-in">EASE-IN</option>
                                         <option value="ease-out">EASE-OUT</option>
+                                        <option value="custom">CUSTOM...</option>
                                     </select>
+                                    <input type="hidden" id="customEasingValue" value="cubic-bezier(0.25, 0.1, 0.25, 1)">
                                 </div>
                                 <div class="flex-1">
                                     <label
@@ -1215,9 +1229,10 @@
                                     <option value="rotation">Rot</option>
                                     <option value="opacity">Opac</option>
                                 </select>
-                                <input type="text" id="ecpExprInput" class="ecp-input" style="flex:1;" placeholder="e.g. sin(t*2)*50" title="Available vars: t, sin, cos, tan, abs, PI">
                             </div>
-                            <div style="display:flex;gap:6px;">
+                            <textarea id="ecpExprInput" class="ecp-input" rows="2" style="width:100%; resize:vertical; font-family:var(--font-tech); font-size:10px; line-height:1.4;" placeholder="e.g. sin(t * Math.PI) * 50&#10;// vars: t, sin, cos, abs, PI" title="Available math variables: t, sin, cos, tan, abs, PI"></textarea>
+                            <div id="ecpExprFeedback" style="font-size:8px; color:#ef4444; display:none;">Invalid syntax</div>
+                            <div style="display:flex;gap:6px; margin-top:2px;">
                                 <button id="ecpApplyExprBtn" class="ecp-btn accent" style="flex:1;">Apply Expr</button>
                                 <button id="ecpClearExprBtn" class="ecp-btn danger" style="flex:1;">Clear</button>
                             </div>
@@ -1478,6 +1493,56 @@
                     </div>
                 </div>
                 <button id="saveSettingsBtn" class="btn-accent w-full py-2.5">SAVE CONFIGURATION</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Easing Editor Modal -->
+    <div id="easingModal"
+        class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center opacity-0 transition-opacity duration-200">
+        <div class="bg-panel shadow-2xl w-full max-w-sm mx-4 flex flex-col border-2 border-border transform scale-95 transition-transform duration-200"
+            id="easingModalContent">
+            <div class="flex justify-between items-center p-4 border-b-2 border-border">
+                <h2 class="text-sm font-display font-bold text-accent uppercase tracking-wider flex items-center gap-2">
+                    ∿ CURVE EDITOR</h2>
+                <button id="closeEasingBtn" class="text-muted hover:text-accent transition-colors p-1"><svg
+                        class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12">
+                        </path>
+                    </svg></button>
+            </div>
+            <div class="p-6 flex flex-col items-center gap-4">
+                <div id="curveCanvasContainer" class="relative w-64 h-64 bg-bg border border-border overflow-visible">
+                    <svg id="curveSvg" width="100%" height="100%" viewBox="0 0 100 100" style="overflow: visible;">
+                        <!-- Grid -->
+                        <line x1="0" y1="50" x2="100" y2="50" stroke="#333" stroke-dasharray="2 2" stroke-width="0.5"/>
+                        <line x1="50" y1="0" x2="50" y2="100" stroke="#333" stroke-dasharray="2 2" stroke-width="0.5"/>
+                        <!-- The Curve -->
+                        <path id="curvePath" d="M0,100 C25,90 25,0 100,0" fill="none" stroke="#E5FF00" stroke-width="2"/>
+                        <!-- Handles lines -->
+                        <line id="handleLine1" x1="0" y1="100" x2="25" y2="90" stroke="#555" stroke-width="1"/>
+                        <line id="handleLine2" x1="100" y1="0" x2="25" y2="0" stroke="#555" stroke-width="1"/>
+                        <!-- Handles -->
+                        <circle id="handle1" cx="25" cy="90" r="4" fill="#E5FF00" class="cursor-move" style="pointer-events: auto;"/>
+                        <circle id="handle2" cx="25" cy="0" r="4" fill="#00FFFF" class="cursor-move" style="pointer-events: auto;"/>
+                        <!-- End points -->
+                        <circle cx="0" cy="100" r="2" fill="#fff"/>
+                        <circle cx="100" cy="0" r="2" fill="#fff"/>
+                    </svg>
+                </div>
+                <div class="flex gap-2 w-full mt-2">
+                    <div class="flex-1 bg-bg p-2 border border-border text-center">
+                        <div class="text-[8px] text-muted uppercase font-tech mb-1">P1 (Yellow)</div>
+                        <div id="p1Coords" class="text-xs font-tech text-white">0.25, 0.10</div>
+                    </div>
+                    <div class="flex-1 bg-bg p-2 border border-border text-center">
+                        <div class="text-[8px] text-muted uppercase font-tech mb-1">P2 (Cyan)</div>
+                        <div id="p2Coords" class="text-xs font-tech text-white">0.25, 1.00</div>
+                    </div>
+                </div>
+                <div id="bezierOutput" class="w-full text-center font-tech text-xs text-accent mt-2">cubic-bezier(0.25, 0.1, 0.25, 1)</div>
+                <button id="saveEasingBtn" class="btn-accent w-full py-2 mt-2">USE THIS CURVE</button>
             </div>
         </div>
     </div>
@@ -1964,7 +2029,7 @@
         document.getElementById('applyCustomAnimBtn').addEventListener('click', () => {
             const type = document.getElementById('animType').value;
             const duration = document.getElementById('animDuration').value || '2';
-            const easing = document.getElementById('animEasing').value;
+            const baseEasing = document.getElementById('animEasing').value; const easing = baseEasing === 'custom' ? document.getElementById('customEasingValue').value : baseEasing;
             const direction = document.getElementById('animDir').value;
             const delay = document.getElementById('animDelay').value || '0';
             const iteration = document.getElementById('animIteration').value || 'infinite';
@@ -4841,7 +4906,7 @@
             y2kAssetsData.forEach(asset => {
                 if (filterCat !== 'all' && asset.cat !== filterCat) return;
                 const card = document.createElement('div');
-                card.className = 'bg-bg border border-border rounded flex flex-col items-center justify-center p-4 cursor-pointer hover:border-accent hover:bg-accent/5 transition-all group relative h-28 overflow-hidden';
+                card.className = 'asset-card bg-bg border border-border rounded flex flex-col items-center justify-center p-4 cursor-pointer hover:border-accent hover:bg-accent/5 transition-all group relative h-28 overflow-hidden';
                 card.innerHTML = `
                     <div class="w-16 h-16 mb-2 flex items-center justify-center group-hover:scale-110 transition-transform overflow-hidden pointer-events-none">
                         ${asset.code}
@@ -5286,6 +5351,7 @@
 
             // Populate animation list (only for first element for now to avoid massive UI clutter)
             populateAnimList(firstEl);
+            updateMultiSelectVisual();
             renderActiveExpressions();
         }
 
@@ -5593,10 +5659,14 @@
                     const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
                     circle.setAttribute('cx', p.x);
                     circle.setAttribute('cy', p.y);
-                    circle.setAttribute('r', 4);
-                    circle.setAttribute('fill', '#E5FF00');
+                    circle.setAttribute('r', 6);
+                    circle.setAttribute('fill', p.name === 'x1' ? '#00FFFF' : '#FF0055');
+                    circle.setAttribute('stroke', '#FFFFFF');
+                    circle.setAttribute('stroke-width', 1.5);
                     circle.style.cursor = 'move';
                     circle.style.pointerEvents = 'auto';
+                    // Add a glow filter for a polished look
+                    circle.style.filter = 'drop-shadow(0px 0px 4px rgba(255,255,255,0.5))';
                     circle.classList.add('grad-handle');
                     overlay.appendChild(circle);
 
@@ -5796,6 +5866,30 @@
         const ecpClearExprBtn = document.getElementById('ecpClearExprBtn');
         const ecpActiveExprList = document.getElementById('ecpActiveExprList');
 
+        const ecpExprFeedback = document.getElementById('ecpExprFeedback');
+
+        ecpExprInput?.addEventListener('input', () => {
+            const expr = ecpExprInput.value.trim();
+            if (!expr) {
+                ecpExprFeedback.style.display = 'none';
+                ecpApplyExprBtn.disabled = false;
+                ecpApplyExprBtn.style.opacity = '1';
+                return;
+            }
+            try {
+                new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(0, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
+                ecpExprFeedback.style.display = 'none';
+                ecpApplyExprBtn.disabled = false;
+                ecpApplyExprBtn.style.opacity = '1';
+            } catch(e) {
+                ecpExprFeedback.style.display = 'block';
+                ecpExprFeedback.textContent = e.message;
+                ecpApplyExprBtn.disabled = true;
+                ecpApplyExprBtn.style.opacity = '0.5';
+            }
+        });
+
+
         function renderActiveExpressions() {
             ecpActiveExprList.innerHTML = '';
             if (selectedElements.length === 0) return;
@@ -5866,6 +5960,57 @@
         });
 
         // Hook into updateECP to render list
+
+
+        // --- Multi-Select Bounding Box Visual ---
+        let multiSelectBbox = null;
+
+        function updateMultiSelectVisual() {
+            if (multiSelectBbox) {
+                multiSelectBbox.remove();
+                multiSelectBbox = null;
+            }
+
+            if (selectedElements.length > 1) {
+                const svg = svgTransformWrapper.querySelector('svg');
+                if (!svg) return;
+
+                // Calculate combined bounding box
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                let hasValidBox = false;
+
+                selectedElements.forEach(el => {
+                    try {
+                        // Use screen coords to account for all transforms, then map back to SVG space
+                        const box = getScreenBox(el);
+                        if (box.width > 0 && box.height > 0) {
+                            minX = Math.min(minX, box.x);
+                            minY = Math.min(minY, box.y);
+                            maxX = Math.max(maxX, box.x + box.width);
+                            maxY = Math.max(maxY, box.y + box.height);
+                            hasValidBox = true;
+                        }
+                    } catch(e) {}
+                });
+
+                if (hasValidBox) {
+                    multiSelectBbox = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                    multiSelectBbox.setAttribute('x', minX - 2);
+                    multiSelectBbox.setAttribute('y', minY - 2);
+                    multiSelectBbox.setAttribute('width', maxX - minX + 4);
+                    multiSelectBbox.setAttribute('height', maxY - minY + 4);
+                    multiSelectBbox.setAttribute('fill', 'none');
+                    multiSelectBbox.setAttribute('stroke', '#E5FF00');
+                    multiSelectBbox.setAttribute('stroke-width', 1 / scale); // keep line thin regardless of zoom
+                    multiSelectBbox.setAttribute('stroke-dasharray', '4 4');
+                    multiSelectBbox.setAttribute('pointer-events', 'none');
+                    multiSelectBbox.setAttribute('data-system-fix', 'true'); // don't serialize
+
+                    // We append this directly to the SVG root so it draws over everything
+                    svg.appendChild(multiSelectBbox);
+                }
+            }
+        }
 
         // --- ECP Event Listeners ---
         ecpCloseBtn.addEventListener('click', deselectElement);
@@ -6387,6 +6532,118 @@
                 showToast(isEnabled ? 'Scan line enabled' : 'Scan line disabled');
             });
         }
+
+
+        // ═══ EASING CURVE EDITOR LOGIC ═══
+        const animEasingSelect = document.getElementById('animEasing');
+        const customEasingValue = document.getElementById('customEasingValue');
+        const easingModal = document.getElementById('easingModal');
+        const easingModalContent = document.getElementById('easingModalContent');
+        const closeEasingBtn = document.getElementById('closeEasingBtn');
+        const saveEasingBtn = document.getElementById('saveEasingBtn');
+
+        const h1 = document.getElementById('handle1');
+        const h2 = document.getElementById('handle2');
+        const hl1 = document.getElementById('handleLine1');
+        const hl2 = document.getElementById('handleLine2');
+        const curvePath = document.getElementById('curvePath');
+        const p1Coords = document.getElementById('p1Coords');
+        const p2Coords = document.getElementById('p2Coords');
+        const bezierOutput = document.getElementById('bezierOutput');
+
+        let cp1 = { x: 25, y: 90 }; // cubic-bezier(0.25, 0.1)
+        let cp2 = { x: 25, y: 0 };  // cubic-bezier(0.25, 1.0)
+
+        function updateCurveUI() {
+            // Constrain X strictly between 0 and 100
+            cp1.x = Math.max(0, Math.min(100, cp1.x));
+            cp2.x = Math.max(0, Math.min(100, cp2.x));
+
+            // Y can overflow (for bounces), but visually restrict to something reasonable (-50 to 150)
+
+            h1.setAttribute('cx', cp1.x); h1.setAttribute('cy', cp1.y);
+            h2.setAttribute('cx', cp2.x); h2.setAttribute('cy', cp2.y);
+            hl1.setAttribute('x2', cp1.x); hl1.setAttribute('y2', cp1.y);
+            hl2.setAttribute('x2', cp2.x); hl2.setAttribute('y2', cp2.y);
+
+            curvePath.setAttribute('d', `M0,100 C${cp1.x},${cp1.y} ${cp2.x},${cp2.y} 100,0`);
+
+            // Math translation: SVG Y is inverted. 100 = 0 value, 0 = 1 value.
+            const bx1 = (cp1.x / 100).toFixed(2);
+            const by1 = (1 - (cp1.y / 100)).toFixed(2);
+            const bx2 = (cp2.x / 100).toFixed(2);
+            const by2 = (1 - (cp2.y / 100)).toFixed(2);
+
+            p1Coords.textContent = `${bx1}, ${by1}`;
+            p2Coords.textContent = `${bx2}, ${by2}`;
+
+            const bezString = `cubic-bezier(${bx1}, ${by1}, ${bx2}, ${by2})`;
+            bezierOutput.textContent = bezString;
+            customEasingValue.value = bezString;
+        }
+
+        // We use simple mouse events for the handles inside the modal since it's an isolated SVG
+        let activeHandle = null;
+
+        [h1, h2].forEach(handle => {
+            handle.addEventListener('mousedown', (e) => {
+                activeHandle = handle;
+                e.stopPropagation();
+            });
+        });
+
+        document.getElementById('curveCanvasContainer').addEventListener('mousemove', (e) => {
+            if (!activeHandle) return;
+            const rect = document.getElementById('curveSvg').getBoundingClientRect();
+            // Map mouse to 0-100 SVG coordinates
+            const x = ((e.clientX - rect.left) / rect.width) * 100;
+            const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+            if (activeHandle === h1) { cp1.x = x; cp1.y = y; }
+            else { cp2.x = x; cp2.y = y; }
+
+            updateCurveUI();
+        });
+
+        window.addEventListener('mouseup', () => { activeHandle = null; });
+
+        function openEasingModal() {
+            easingModal.classList.remove('hidden');
+            easingModal.classList.add('flex');
+            setTimeout(() => {
+                easingModal.classList.remove('opacity-0');
+                easingModalContent.classList.remove('scale-95');
+                easingModalContent.classList.add('scale-100');
+            }, 10);
+            updateCurveUI();
+        }
+
+        function closeEasingModal() {
+            easingModal.classList.add('opacity-0');
+            easingModalContent.classList.remove('scale-100');
+            easingModalContent.classList.add('scale-95');
+            setTimeout(() => {
+                easingModal.classList.add('hidden');
+                easingModal.classList.remove('flex');
+            }, 200);
+        }
+
+        animEasingSelect.addEventListener('change', (e) => {
+            if (e.target.value === 'custom') {
+                openEasingModal();
+            }
+        });
+
+        closeEasingBtn.addEventListener('click', () => {
+            closeEasingModal();
+            // Revert dropdown if they closed without saving
+            animEasingSelect.value = 'ease-in-out';
+        });
+
+        saveEasingBtn.addEventListener('click', () => {
+            // customEasingValue is already updated by updateCurveUI
+            closeEasingModal();
+        });
 
         // ═══ VISUAL TIMELINE LOGIC ═══
         let timelineDuration = 5; // Default 5s scene
