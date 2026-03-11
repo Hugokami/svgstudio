@@ -2924,7 +2924,17 @@
             if (e.button !== 0 || e.target.closest('button')) return;
             isPanning = true; startX = e.clientX - panX; startY = e.clientY - panY;
         });
-        window.addEventListener('mousemove', (e) => { if (!isPanning) return; panX = e.clientX - startX; panY = e.clientY - startY; updateTransform(); });
+        let panRAF = null;
+        window.addEventListener('mousemove', (e) => {
+            if (!isPanning) return;
+            if (panRAF) return;
+            panRAF = requestAnimationFrame(() => {
+                panX = e.clientX - startX;
+                panY = e.clientY - startY;
+                updateTransform();
+                panRAF = null;
+            });
+        });
         window.addEventListener('mouseup', () => isPanning = false);
 
         // Export PNG, GIF, & WebM
@@ -6528,20 +6538,25 @@
 
         // Scrubbing logic
         let isScrubbing = false;
+        let scrubRAF = null;
         function handleScrub(e) {
-            const rect = tlScrubberContainer.getBoundingClientRect();
-            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-            let x = clientX - rect.left;
-            let progress = Math.max(0, Math.min(1, x / rect.width));
+            if (scrubRAF) return;
+            scrubRAF = requestAnimationFrame(() => {
+                const rect = tlScrubberContainer.getBoundingClientRect();
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                let x = clientX - rect.left;
+                let progress = Math.max(0, Math.min(1, x / rect.width));
 
-            masterTimeline.progress(progress).pause();
+                masterTimeline.progress(progress).pause();
 
-            const svg = svgTransformWrapper.querySelector('svg');
-            if (svg) {
-                svg.pauseAnimations();
-                svg.setCurrentTime(masterTimeline.time());
-            }
-            updateTimelineUI();
+                const svg = svgTransformWrapper.querySelector('svg');
+                if (svg) {
+                    svg.pauseAnimations();
+                    svg.setCurrentTime(masterTimeline.time());
+                }
+                updateTimelineUI();
+                scrubRAF = null;
+            });
         }
 
         tlScrubberContainer.addEventListener('mousedown', (e) => {
@@ -6555,6 +6570,10 @@
 
         window.addEventListener('mouseup', () => {
             isScrubbing = false;
+            if (scrubRAF) {
+                cancelAnimationFrame(scrubRAF);
+                scrubRAF = null;
+            }
         });
 
         // ═══ GSAP TRANSLATION ENGINE (Phase 3) ═══
@@ -6731,11 +6750,10 @@
 
 
 
-        // ═══ PERFORMANCE: rAF-Throttled Pan ═══
-
         // ═══ MARQUEE SELECTION ═══
         let isMarquee = false;
         let marqueeStart = { x: 0, y: 0 };
+        let marqueeContainerRect = null;
         let marqueeBox = document.createElement('div');
         marqueeBox.className = 'marquee-box';
         marqueeBox.style.position = 'absolute';
@@ -6757,9 +6775,9 @@
 
             if (isCanvasBackground) {
                 isMarquee = true;
-                const rect = svgPreviewContainer.getBoundingClientRect();
-                marqueeStart.x = e.clientX - rect.left;
-                marqueeStart.y = e.clientY - rect.top;
+                marqueeContainerRect = svgPreviewContainer.getBoundingClientRect();
+                marqueeStart.x = e.clientX - marqueeContainerRect.left;
+                marqueeStart.y = e.clientY - marqueeContainerRect.top;
 
                 marqueeBox.style.left = marqueeStart.x + 'px';
                 marqueeBox.style.top = marqueeStart.y + 'px';
@@ -6772,10 +6790,9 @@
         });
 
         svgPreviewContainer.addEventListener('mousemove', (e) => {
-            if (!isMarquee) return;
-            const rect = svgPreviewContainer.getBoundingClientRect();
-            const currentX = e.clientX - rect.left;
-            const currentY = e.clientY - rect.top;
+            if (!isMarquee || !marqueeContainerRect) return;
+            const currentX = e.clientX - marqueeContainerRect.left;
+            const currentY = e.clientY - marqueeContainerRect.top;
 
             const x = Math.min(marqueeStart.x, currentX);
             const y = Math.min(marqueeStart.y, currentY);
@@ -6791,6 +6808,7 @@
         window.addEventListener('mouseup', (e) => {
             if (!isMarquee) return;
             isMarquee = false;
+            marqueeContainerRect = null;
             marqueeBox.style.display = 'none';
 
             const mRect = marqueeBox.getBoundingClientRect();
@@ -6830,20 +6848,6 @@
                 updateECP();
             }
         });
-
-        let panRAF = null;
-        const originalPanHandler = (e) => {
-            if (!isPanning) return;
-            if (panRAF) return;
-            panRAF = requestAnimationFrame(() => {
-                panX = e.clientX - startX;
-                panY = e.clientY - startY;
-                updateTransform();
-                panRAF = null;
-            });
-        };
-        // Replace the existing mousemove handler for panning with throttled version
-        window.removeEventListener('mousemove', originalPanHandler);
 
     </script>
 </body>
