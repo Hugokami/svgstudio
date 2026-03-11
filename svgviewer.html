@@ -545,7 +545,23 @@
 </div>
 </div>
 </div>
-<!-- Zoom Controls -->
+
+<div class="absolute bottom-6 right-6 flex flex-col gap-2 z-30 pointer-events-auto">
+    <button class="tooltip p-2 bg-panel/90 backdrop-blur-md border border-border text-accent rounded hover:bg-accent/20 transition-all shadow-xl active-tool" id="marqueeToolBtn">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h4v4H4zm12 0h4v4h-4zM4 16h4v4H4zm12 0h4v4h-4zm-8-12h4m-4 16h4m-8-4v-4m16 4v-4" />
+        </svg>
+        <span class="tooltip-text" style="right:100%; top:50%; transform:translateY(-50%); left:auto; margin-right:8px;">Marquee Select (S)</span>
+    </button>
+    <button class="tooltip p-2 bg-panel/90 backdrop-blur-md border border-border text-muted rounded hover:bg-accent/20 transition-all shadow-xl" id="panToolBtn">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+        </svg>
+        <span class="tooltip-text" style="right:100%; top:50%; transform:translateY(-50%); left:auto; margin-right:8px;">Pan View (Space)</span>
+    </button>
+</div>
+
+            <!-- Zoom Controls -->
 <div class="zoom-controls">
 <button id="zoomOutBtn" title="Zoom Out">−</button>
 <span class="zoom-pct" id="zoomPct">100%</span>
