@@ -1203,7 +1203,29 @@
                         </div>
 
 
-                        <div class="ecp-section-title">Animations</div>
+
+                        <!-- Expressions Editor -->
+                        <div class="ecp-section-title" style="margin-top: 8px;">Expressions (Code-Driven)</div>
+                        <div id="exprContainer" style="display: flex; flex-direction: column; gap: 4px;">
+                            <div class="ecp-row">
+                                <select id="ecpExprProp" class="ecp-input" style="width: 60px;">
+                                    <option value="x">X</option>
+                                    <option value="y">Y</option>
+                                    <option value="scale">Scale</option>
+                                    <option value="rotation">Rot</option>
+                                    <option value="opacity">Opac</option>
+                                </select>
+                                <input type="text" id="ecpExprInput" class="ecp-input" style="flex:1;" placeholder="e.g. sin(t*2)*50" title="Available vars: t, sin, cos, tan, abs, PI">
+                            </div>
+                            <div style="display:flex;gap:6px;">
+                                <button id="ecpApplyExprBtn" class="ecp-btn accent" style="flex:1;">Apply Expr</button>
+                                <button id="ecpClearExprBtn" class="ecp-btn danger" style="flex:1;">Clear</button>
+                            </div>
+                            <div id="ecpActiveExprList" style="display:flex;flex-direction:column;gap:4px;margin-top:4px;"></div>
+                        </div>
+
+                        <div class="ecp-section-title" style="margin-top: 8px;">Animations</div>
+
                         <div id="ecpAnimList" style="display:flex;flex-direction:column;gap:4px;">
                             <span style="font-family:'Jura',monospace;font-size:10px;color:#555;">No animations</span>
                         </div>
@@ -5264,6 +5286,7 @@
 
             // Populate animation list (only for first element for now to avoid massive UI clutter)
             populateAnimList(firstEl);
+            renderActiveExpressions();
         }
 
         function populateAnimList(el) {
@@ -5764,6 +5787,85 @@
             updateEditorFromPreview();
         });
 
+
+
+        // --- Expressions Logic ---
+        const ecpExprProp = document.getElementById('ecpExprProp');
+        const ecpExprInput = document.getElementById('ecpExprInput');
+        const ecpApplyExprBtn = document.getElementById('ecpApplyExprBtn');
+        const ecpClearExprBtn = document.getElementById('ecpClearExprBtn');
+        const ecpActiveExprList = document.getElementById('ecpActiveExprList');
+
+        function renderActiveExpressions() {
+            ecpActiveExprList.innerHTML = '';
+            if (selectedElements.length === 0) return;
+            const el = selectedElements[0]; // Display for first selected element
+
+            let hasExpr = false;
+            Array.from(el.attributes).forEach(attr => {
+                if (attr.name.startsWith('data-expr-')) {
+                    hasExpr = true;
+                    const prop = attr.name.replace('data-expr-', '');
+                    const val = attr.value;
+
+                    const div = document.createElement('div');
+                    div.className = 'ecp-anim-item';
+                    div.innerHTML = `<span style="color:#00ffff">${prop}:</span> <span style="font-size:8px;">${val}</span><button title="Remove">✕</button>`;
+                    div.querySelector('button').addEventListener('click', () => {
+                        selectedElements.forEach(sel => sel.removeAttribute(attr.name));
+                        updateEditorFromPreview();
+                        renderActiveExpressions();
+                    });
+                    ecpActiveExprList.appendChild(div);
+                }
+            });
+        }
+
+        ecpApplyExprBtn?.addEventListener('click', () => {
+            if (selectedElements.length === 0) return;
+            const prop = ecpExprProp.value;
+            const expr = ecpExprInput.value.trim();
+            if (!expr) return;
+
+            // Validate expression roughly
+            try {
+                // Dummy evaluate
+                new Function('t', 'Math', `with(Math) { return ${expr}; }`)(0, Math);
+            } catch (e) {
+                showToast('Invalid Expression!', true);
+                return;
+            }
+
+            selectedElements.forEach(el => {
+                el.setAttribute(`data-expr-${prop}`, expr);
+            });
+
+            ecpExprInput.value = '';
+            updateEditorFromPreview();
+            renderActiveExpressions();
+            showToast('Expression applied');
+
+            // Force timeline to play so user sees it
+            if (masterTimeline.paused()) tlPlayPauseBtn.click();
+        });
+
+        ecpClearExprBtn?.addEventListener('click', () => {
+            if (selectedElements.length === 0) return;
+            selectedElements.forEach(el => {
+                Array.from(el.attributes).forEach(attr => {
+                    if (attr.name.startsWith('data-expr-')) {
+                        el.removeAttribute(attr.name);
+                        // Reset GSAP properties left over
+                        gsap.set(el, { clearProps: attr.name.replace('data-expr-', '') });
+                    }
+                });
+            });
+            updateEditorFromPreview();
+            renderActiveExpressions();
+            showToast('Expressions cleared');
+        });
+
+        // Hook into updateECP to render list
 
         // --- ECP Event Listeners ---
         ecpCloseBtn.addEventListener('click', deselectElement);
@@ -6317,6 +6419,38 @@
                 } catch (e) { }
             }
 
+
+            // ═══ EXPRESSIONS EVALUATION ═══
+            if (svg) {
+                const exprElements = svg.querySelectorAll('[data-expr-x], [data-expr-y], [data-expr-scale], [data-expr-rotation], [data-expr-opacity]');
+                const t = masterTimeline.time();
+
+                exprElements.forEach(el => {
+                    const updates = {};
+                    Array.from(el.attributes).forEach(attr => {
+                        if (attr.name.startsWith('data-expr-')) {
+                            const prop = attr.name.replace('data-expr-', '');
+                            const expr = attr.value;
+                            try {
+                                // Expose common math functions globally for the expression
+                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
+                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
+                                );
+                                updates[prop] = val;
+                            } catch (e) {
+                                // Silent fail for bad mid-frame expressions
+                            }
+                        }
+                    });
+
+                    if (Object.keys(updates).length > 0) {
+                        // Use GSAP to apply the updates since it handles SVG transform origins well
+                        // Use duration 0 to act as a setter
+                        gsap.set(el, updates);
+                    }
+                });
+            }
+
             if (masterTimeline.paused()) {
                 playIcon.classList.remove('hidden');
                 pauseIcon.classList.add('hidden');
@@ -6349,6 +6483,38 @@
 
         tlPlayPauseBtn.addEventListener('click', () => {
             const svg = svgTransformWrapper.querySelector('svg');
+
+            // ═══ EXPRESSIONS EVALUATION ═══
+            if (svg) {
+                const exprElements = svg.querySelectorAll('[data-expr-x], [data-expr-y], [data-expr-scale], [data-expr-rotation], [data-expr-opacity]');
+                const t = masterTimeline.time();
+
+                exprElements.forEach(el => {
+                    const updates = {};
+                    Array.from(el.attributes).forEach(attr => {
+                        if (attr.name.startsWith('data-expr-')) {
+                            const prop = attr.name.replace('data-expr-', '');
+                            const expr = attr.value;
+                            try {
+                                // Expose common math functions globally for the expression
+                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
+                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
+                                );
+                                updates[prop] = val;
+                            } catch (e) {
+                                // Silent fail for bad mid-frame expressions
+                            }
+                        }
+                    });
+
+                    if (Object.keys(updates).length > 0) {
+                        // Use GSAP to apply the updates since it handles SVG transform origins well
+                        // Use duration 0 to act as a setter
+                        gsap.set(el, updates);
+                    }
+                });
+            }
+
             if (masterTimeline.paused()) {
                 if (masterTimeline.progress() >= 1) masterTimeline.restart();
                 else masterTimeline.play();
