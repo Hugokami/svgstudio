@@ -464,6 +464,7 @@
 
         /* === ELEMENT CONTROL PANEL === */
         .el-control-panel {
+            display: none !important;
             position: absolute;
             top: 12px;
             left: 12px;
@@ -750,6 +751,32 @@
         <section id="editorSection" class="flex flex-col bg-bg border-r-2 border-border h-full relative min-w-0"
             style="flex: 0 0 35%;">
             
+            <!-- Global Action Bar (Undo, Delete All) -->
+            <div class="flex items-center justify-between px-2 py-1 bg-panel border-b border-border shrink-0">
+                <div class="flex items-center gap-0.5">
+                    <button id="undoBtn" class="tooltip p-1.5 text-muted hover:text-accent transition-colors"><svg
+                            class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M3 10h10a5 5 0 015 5v2M3 10l6 6m-6-6l6-6"></path>
+                        </svg><span class="tooltip-text">Undo (Ctrl+Z)</span></button>
+                    <button id="deleteAllBtn"
+                        class="tooltip p-1.5 text-muted hover:text-rose-400 transition-colors"><svg class="w-4 h-4"
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
+                            </path>
+                        </svg><span class="tooltip-text">Delete All</span></button>
+                    <button id="stripAllAnimBtn"
+                        class="tooltip p-1.5 text-muted hover:text-amber-400 transition-colors"><svg class="w-4 h-4"
+                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636">
+                            </path>
+                        </svg><span class="tooltip-text">Strip All Animations</span></button>
+                </div>
+                <span class="text-[9px] text-muted font-tech uppercase tracking-wider">SVG STUDIO</span>
+            </div>
+
             <!-- Left Panel Tabs Header -->
             <div class="flex items-center bg-panel border-b-2 border-border shrink-0">
                 <button class="left-tab-btn active flex-1 py-1.5 font-display text-[10px] font-bold tracking-wider text-accent border-r border-border hover:bg-bg transition-colors" data-tab="code">CODE</button>
@@ -775,18 +802,6 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M4 6h16M4 12h16M4 18h7"></path>
                         </svg><span class="tooltip-text">Format (Ctrl+S)</span></button>
-                    <button id="undoBtn" class="tooltip p-1.5 text-muted hover:text-accent transition-colors"><svg
-                            class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M3 10h10a5 5 0 015 5v2M3 10l6 6m-6-6l6-6"></path>
-                        </svg><span class="tooltip-text">Undo (Ctrl+Z)</span></button>
-                    <button id="deleteAllBtn"
-                        class="tooltip p-1.5 text-muted hover:text-rose-400 transition-colors"><svg class="w-4 h-4"
-                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16">
-                            </path>
-                        </svg><span class="tooltip-text">Delete All</span></button>
                     <button id="minifyBtn" class="tooltip p-1.5 text-muted hover:text-accent transition-colors"><svg
                             class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16">
@@ -922,6 +937,14 @@
                             <div class="ecp-row mt-1" style="gap:2px;">
                                 <button id="ecpDistHorizBtn2" class="ecp-btn" style="flex:1;" title="Distribute Horizontally">↔ Dist H</button>
                                 <button id="ecpDistVertBtn2" class="ecp-btn" style="flex:1;" title="Distribute Vertically">↕ Dist V</button>
+                            </div>
+                        </div>
+
+                        <!-- Components -->
+                        <div class="px-3 py-2 border-b border-border">
+                            <div class="ecp-section-title">Components & Instances</div>
+                            <div class="flex gap-2 mt-1">
+                                <button id="ecpConvertToSymbolBtn2" class="ecp-btn accent" style="flex:1;" title="Wrap in <symbol> and create a <use> instance">⟁ Convert to Symbol</button>
                             </div>
                         </div>
 
@@ -2260,7 +2283,22 @@
                 }
             }
 
-            const animProps = `${duration}s ${easing} ${delay}s ${iteration} ${direction}`;
+            // Convert GSAP easing names to valid CSS cubic-bezier timing functions
+            const gsapToCss = {
+                'linear': 'linear',
+                'ease-in-out': 'ease-in-out',
+                'ease-in': 'ease-in',
+                'ease-out': 'ease-out',
+                'power2.out': 'cubic-bezier(0.22, 0.61, 0.36, 1)',
+                'power4.inOut': 'cubic-bezier(0.76, 0, 0.24, 1)',
+                'back.out(1.7)': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+                'elastic.out(1, 0.3)': 'cubic-bezier(0.68, -0.55, 0.27, 1.55)',
+                'bounce.out': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+                'expo.inOut': 'cubic-bezier(0.87, 0, 0.13, 1)'
+            };
+            const cssEasing = gsapToCss[easing] || easing;
+
+            const animProps = `${duration}s ${cssEasing} ${delay}s ${iteration} ${direction}`;
             const originStyle = `transform-origin: ${origin}; transform-box: fill-box;`;
 
             // Fix: Strip ONLY the keyframe and class for the CURRENT animation type (preserves other stacked animations)
@@ -5710,6 +5748,12 @@
             selectElement(useEl);
             updateEditorFromPreview();
             showToast('Converted to Symbol');
+        });
+
+        // Wire Properties tab convert-to-symbol button to use same logic
+        const ecpConvertToSymbolBtn2 = document.getElementById('ecpConvertToSymbolBtn2');
+        ecpConvertToSymbolBtn2?.addEventListener('click', () => {
+            ecpConvertToSymbolBtn?.click();
         });
 
         ecpDuplicateInstanceBtn?.addEventListener('click', () => {
