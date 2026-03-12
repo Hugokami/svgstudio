@@ -1311,14 +1311,34 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
         });
 
         // Resizer Logic
+        // ⚡ Bolt Optimization: Throttled resizer drag with requestAnimationFrame.
+        // Impact: Prevents layout thrashing on every mousemove event. Locks DOM updates to
+        // the display refresh rate (~60fps), saving CPU cycles and significantly smoothing out resizing.
         let isResizing = false;
+        let resizingRAF = null;
+        let resizerClientX = null;
         resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            let newWidth = (e.clientX / document.body.clientWidth) * 100;
-            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            resizerClientX = e.clientX;
+            if (resizingRAF) return;
+            resizingRAF = requestAnimationFrame(() => {
+                let newWidth = (resizerClientX / document.body.clientWidth) * 100;
+                editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+                resizingRAF = null;
+            });
         });
-        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; } });
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = 'default';
+                if (resizingRAF) {
+                    cancelAnimationFrame(resizingRAF);
+                    resizingRAF = null;
+                }
+            }
+        });
 
         // Zoom & Pan
         function updateTransform() {
@@ -5296,20 +5316,33 @@ ecpStrokeWidth.addEventListener('change', () => {
             }
         });
 
+        // ⚡ Bolt Optimization: Throttled marquee selection with requestAnimationFrame.
+        // Impact: Reduces the frequency of DOM inline style updates for width/height/top/left during drag.
+        // Cures jank and prevents the JS thread from blocking while trying to draw the selection box.
+        let marqueeRAF = null;
+        let marqueeClientX = null;
+        let marqueeClientY = null;
         svgPreviewContainer.addEventListener('mousemove', (e) => {
             if (!isMarquee || !marqueeContainerRect) return;
-            const currentX = e.clientX - marqueeContainerRect.left;
-            const currentY = e.clientY - marqueeContainerRect.top;
+            marqueeClientX = e.clientX;
+            marqueeClientY = e.clientY;
+            if (marqueeRAF) return;
 
-            const x = Math.min(marqueeStart.x, currentX);
-            const y = Math.min(marqueeStart.y, currentY);
-            const w = Math.abs(currentX - marqueeStart.x);
-            const h = Math.abs(currentY - marqueeStart.y);
+            marqueeRAF = requestAnimationFrame(() => {
+                const currentX = marqueeClientX - marqueeContainerRect.left;
+                const currentY = marqueeClientY - marqueeContainerRect.top;
 
-            marqueeBox.style.left = x + 'px';
-            marqueeBox.style.top = y + 'px';
-            marqueeBox.style.width = w + 'px';
-            marqueeBox.style.height = h + 'px';
+                const x = Math.min(marqueeStart.x, currentX);
+                const y = Math.min(marqueeStart.y, currentY);
+                const w = Math.abs(currentX - marqueeStart.x);
+                const h = Math.abs(currentY - marqueeStart.y);
+
+                marqueeBox.style.left = x + 'px';
+                marqueeBox.style.top = y + 'px';
+                marqueeBox.style.width = w + 'px';
+                marqueeBox.style.height = h + 'px';
+                marqueeRAF = null;
+            });
         });
 
         window.addEventListener('mouseup', (e) => {
@@ -5317,6 +5350,10 @@ ecpStrokeWidth.addEventListener('change', () => {
             isMarquee = false;
             marqueeContainerRect = null;
             marqueeBox.style.display = 'none';
+            if (marqueeRAF) {
+                cancelAnimationFrame(marqueeRAF);
+                marqueeRAF = null;
+            }
 
             const mRect = marqueeBox.getBoundingClientRect();
             // If the box is basically a click, do nothing
