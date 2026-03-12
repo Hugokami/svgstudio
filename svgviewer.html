@@ -752,9 +752,10 @@
             
             <!-- Left Panel Tabs Header -->
             <div class="flex items-center bg-panel border-b-2 border-border shrink-0">
-                <button class="left-tab-btn active flex-1 py-1.5 font-display text-xs font-bold tracking-wider text-accent border-r border-border hover:bg-bg transition-colors" data-tab="code">CODE</button>
-                <button class="left-tab-btn flex-1 py-1.5 font-display text-xs font-bold tracking-wider text-muted border-r border-border hover:text-accent hover:bg-bg transition-colors" data-tab="assets">ASSETS</button>
-                <button class="left-tab-btn flex-1 py-1.5 font-display text-xs font-bold tracking-wider text-muted hover:text-accent hover:bg-bg transition-colors" data-tab="animations">ANIMATIONS</button>
+                <button class="left-tab-btn active flex-1 py-1.5 font-display text-[10px] font-bold tracking-wider text-accent border-r border-border hover:bg-bg transition-colors" data-tab="code">CODE</button>
+                <button class="left-tab-btn flex-1 py-1.5 font-display text-[10px] font-bold tracking-wider text-muted border-r border-border hover:text-accent hover:bg-bg transition-colors" data-tab="assets">ASSETS</button>
+                <button class="left-tab-btn flex-1 py-1.5 font-display text-[10px] font-bold tracking-wider text-muted border-r border-border hover:text-accent hover:bg-bg transition-colors" data-tab="animations">ANIMS</button>
+                <button class="left-tab-btn flex-1 py-1.5 font-display text-[10px] font-bold tracking-wider text-muted hover:text-accent hover:bg-bg transition-colors" data-tab="properties">PROPS</button>
             </div>
             
             <!-- Code Tab Content -->
@@ -834,6 +835,107 @@
                 <textarea id="svgInput" class="hidden"></textarea>
             </div>
             </div> <!-- End tab-code -->
+
+            <!-- Properties Tab Content -->
+            <div id="tab-properties" class="left-tab-content hidden flex-1 flex flex-col min-h-0 bg-panel overflow-y-auto">
+                <div id="propsTabContent" class="flex flex-col gap-0">
+                    <div id="propsEmpty" class="text-zinc-500 text-center py-12 text-sm">Select an element on the canvas to edit its properties.</div>
+                    <div id="propsEditor" class="hidden flex-col gap-0">
+                        <!-- Header -->
+                        <div class="px-3 py-2 border-b-2 border-border bg-bg/80 sticky top-0 z-10">
+                            <h4 id="propsTitle" class="text-[10px] font-bold text-accent uppercase tracking-widest font-display">▸ ELEMENT</h4>
+                        </div>
+
+                        <!-- Size / Resize -->
+                        <div class="px-3 py-2 border-b border-border">
+                            <div class="ecp-section-title">Size</div>
+                            <div class="ecp-row mt-1">
+                                <span class="ecp-label">W</span>
+                                <input type="number" id="ecpWidth" class="ecp-input" min="1" step="1" value="100">
+                                <span class="ecp-label" style="min-width:20px;text-align:center;">H</span>
+                                <input type="number" id="ecpHeight" class="ecp-input" min="1" step="1" value="100">
+                            </div>
+                        </div>
+
+                        <!-- Position -->
+                        <div class="px-3 py-2 border-b border-border">
+                            <div class="ecp-section-title">Position</div>
+                            <div class="ecp-row mt-1">
+                                <span class="ecp-label">X</span>
+                                <input type="range" id="ecpPosX" class="ecp-input flex-1" min="-500" max="500" step="1" value="0">
+                                <span id="ecpPosXVal" class="text-[10px] text-accent font-tech min-w-[32px] text-right">0</span>
+                            </div>
+                            <div class="ecp-row mt-1">
+                                <span class="ecp-label">Y</span>
+                                <input type="range" id="ecpPosY" class="ecp-input flex-1" min="-500" max="500" step="1" value="0">
+                                <span id="ecpPosYVal" class="text-[10px] text-accent font-tech min-w-[32px] text-right">0</span>
+                            </div>
+                        </div>
+
+                        <!-- Properties -->
+                        <div class="px-3 py-2 border-b border-border">
+                            <div class="ecp-section-title">Properties</div>
+                            <div class="ecp-row mt-1">
+                                <span class="ecp-label">Opacity</span>
+                                <input type="range" id="ecpOpacity2" class="ecp-input" min="0" max="1" step="0.05" value="1">
+                                <span id="ecpOpacityVal2" class="text-[10px] text-accent font-tech min-w-[28px] text-right">1.00</span>
+                            </div>
+                            <div class="ecp-row mt-1">
+                                <span class="ecp-label">Fill</span>
+                                <input type="color" id="ecpFill2" class="ecp-input" value="#E5FF00">
+                                <span class="ecp-label" style="min-width:36px;">Stroke</span>
+                                <input type="color" id="ecpStroke2" class="ecp-input" value="#E5FF00">
+                            </div>
+                            <div class="ecp-row mt-1">
+                                <span class="ecp-label">Stroke W</span>
+                                <input type="number" id="ecpStrokeWidth2" class="ecp-input" min="0" step="0.5" value="1" style="width:60px;">
+                            </div>
+                        </div>
+
+                        <!-- Transform -->
+                        <div class="px-3 py-2 border-b border-border">
+                            <div class="ecp-section-title">Transform</div>
+                            <div class="ecp-row mt-1">
+                                <span class="ecp-label">Scale</span>
+                                <input type="range" id="ecpScale2" class="ecp-input flex-1" min="0.1" max="5" step="0.05" value="1">
+                                <span id="ecpScaleVal2" class="text-[10px] text-accent font-tech min-w-[32px] text-right">1.00</span>
+                            </div>
+                            <div class="ecp-row mt-1">
+                                <span class="ecp-label">Rotate</span>
+                                <input type="range" id="ecpRot2" class="ecp-input flex-1" min="-180" max="180" step="1" value="0">
+                                <span id="ecpRotVal2" class="text-[10px] text-accent font-tech min-w-[32px] text-right">0°</span>
+                            </div>
+                        </div>
+
+                        <!-- Align & Distribute -->
+                        <div class="px-3 py-2 border-b border-border">
+                            <div class="ecp-section-title">Align & Distribute</div>
+                            <div class="ecp-row mt-1" style="gap:2px;">
+                                <button id="ecpAlignLeftBtn2" class="ecp-btn" style="flex:1;" title="Align Left">⇤</button>
+                                <button id="ecpAlignCenterBtn2" class="ecp-btn" style="flex:1;" title="Align Center">⇹</button>
+                                <button id="ecpAlignRightBtn2" class="ecp-btn" style="flex:1;" title="Align Right">⇥</button>
+                                <div style="width:4px;"></div>
+                                <button id="ecpAlignTopBtn2" class="ecp-btn" style="flex:1;" title="Align Top">⇡</button>
+                                <button id="ecpAlignMiddleBtn2" class="ecp-btn" style="flex:1;" title="Align Middle">⇕</button>
+                                <button id="ecpAlignBottomBtn2" class="ecp-btn" style="flex:1;" title="Align Bottom">⇣</button>
+                            </div>
+                            <div class="ecp-row mt-1" style="gap:2px;">
+                                <button id="ecpDistHorizBtn2" class="ecp-btn" style="flex:1;" title="Distribute Horizontally">↔ Dist H</button>
+                                <button id="ecpDistVertBtn2" class="ecp-btn" style="flex:1;" title="Distribute Vertically">↕ Dist V</button>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="px-3 py-2">
+                            <div class="ecp-section-title">Actions</div>
+                            <div class="flex gap-2 mt-1">
+                                <button id="ecpDeleteBtn2" class="ecp-btn danger" style="flex:1;">✕ Delete</button>
+                                <button id="ecpStripAnimBtn2" class="ecp-btn accent" style="flex:1;">⊘ Strip Anims</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Assets Tab Content -->
             <div id="tab-assets" class="left-tab-content hidden flex-1 flex flex-col min-h-0 bg-panel">
@@ -1771,6 +1873,7 @@
         const tabCode = document.getElementById('tab-code');
         const tabAssets = document.getElementById('tab-assets');
         const tabAnimations = document.getElementById('tab-animations');
+        const tabProperties = document.getElementById('tab-properties');
 
         function switchLeftTab(tabId) {
             leftTabBtns.forEach(btn => {
@@ -1783,7 +1886,7 @@
                 }
             });
 
-            [tabCode, tabAssets, tabAnimations].forEach(content => {
+            [tabCode, tabAssets, tabAnimations, tabProperties].forEach(content => {
                 if (content && content.id === `tab-${tabId}`) {
                     content.classList.remove('hidden');
                     content.classList.add('flex');
@@ -1793,6 +1896,8 @@
                         renderAnimList();
                     } else if (tabId === 'code') {
                         setTimeout(() => editor.refresh(), 10);
+                    } else if (tabId === 'properties') {
+                        updatePropsTab();
                     }
                 } else if (content) {
                     content.classList.add('hidden');
@@ -1809,7 +1914,10 @@
         editor.setValue(initialSVG);
         updatePreview(initialSVG);
 
+        let _skipPreviewUpdate = false;
+
         editor.on('change', () => {
+            if (_skipPreviewUpdate) return; // Don't rebuild DOM when syncing from property/transform changes
             clearTimeout(debounceTimer);
             const val = editor.getValue();
             const delay = val.length > 50000 ? 800 : 200;
@@ -2155,12 +2263,40 @@
             const animProps = `${duration}s ${easing} ${delay}s ${iteration} ${direction}`;
             const originStyle = `transform-origin: ${origin}; transform-box: fill-box;`;
 
-            // Fix: Strip ALL existing @keyframes and .anim-* rules so they regenerate with fresh intensity values
-            style.textContent = style.textContent
-                .replace(/@keyframes\s+\w+[\s\S]*?\}\s*\}/g, '')
-                .replace(/\.anim-[\w-]+\s*\{[^}]*\}/g, '')
-                .replace(/\n{3,}/g, '\n')
-                .trim();
+            // Fix: Strip ONLY the keyframe and class for the CURRENT animation type (preserves other stacked animations)
+            const typeToKeyframes = {
+                'spin': ['spin'], 'pulse': ['pulse'], 'float': ['float'], 'shake': ['shake'],
+                'fade': ['fade'], 'bounce': ['bounce'], 'orbit': ['orbitAnim'],
+                'draw': ['drawLine'], 'draw-loop': ['drawLoop'], 'dash-march': ['dashMarch'],
+                'draw-erase': ['drawErase'], 'dash-flow': ['dashFlow'],
+                'adv-stroke-draw': ['advStrokeDraw'], 'adv-stroke-beam': ['advStrokeBeam'], 'adv-stroke-dash': ['advStrokeDash'],
+                'neon': ['neonPulse'], 'rubberband': ['rubberband'], 'swing': ['swing3d'],
+                'glitch-shake': ['glitchShake'], 'glitch': ['glitchJitter'],
+                'cyber-sweep': [], 'spectrum-flow': [], 'vortex-gradient': [], 'antigravity-aura': []
+            };
+            const typeToClass = {
+                'spin': 'anim-spin', 'pulse': 'anim-pulse', 'float': 'anim-float', 'shake': 'anim-shake',
+                'fade': 'anim-fade', 'bounce': 'anim-bounce', 'orbit': 'anim-orbit',
+                'draw': 'anim-draw', 'draw-loop': 'anim-draw-loop', 'dash-march': 'anim-dash-march',
+                'draw-erase': 'anim-draw-erase', 'dash-flow': 'anim-dash-flow',
+                'adv-stroke-draw': 'anim-adv-stroke-draw', 'adv-stroke-beam': 'anim-adv-stroke-beam', 'adv-stroke-dash': 'anim-adv-stroke-dash',
+                'neon': 'anim-neon-pulse', 'rubberband': 'anim-rubber', 'swing': 'anim-swing',
+                'glitch-shake': 'anim-glitch-shake', 'glitch': 'anim-glitch'
+            };
+            const kfNames = typeToKeyframes[type] || [];
+            const clsName = typeToClass[type] || '';
+            kfNames.forEach(kf => {
+                const kfRegex = new RegExp(`@keyframes\\s+${kf}\\s*\\{[^}]*\\{[^}]*\\}\\s*\\}`, 'g');
+                style.textContent = style.textContent.replace(kfRegex, '');
+                // Also try simpler single-brace keyframes
+                const kfRegex2 = new RegExp(`@keyframes\\s+${kf}\\s*\\{[\\s\\S]*?\\}\\s*\\}`, 'g');
+                style.textContent = style.textContent.replace(kfRegex2, '');
+            });
+            if (clsName) {
+                const clsRegex = new RegExp(`\\.${clsName.replace('-', '\\-')}\\s*\\{[^}]*\\}`, 'g');
+                style.textContent = style.textContent.replace(clsRegex, '');
+            }
+            style.textContent = style.textContent.replace(/\n{3,}/g, '\n').trim();
 
             if (type === 'spin') {
                 style.textContent += `\n@keyframes spin { 100% { transform: rotate(360deg); } }`;
@@ -4936,8 +5072,10 @@
                 const card = document.createElement('div');
                 card.className = 'bg-bg border border-border rounded flex flex-col items-center justify-center p-4 cursor-pointer hover:border-accent hover:bg-accent/5 transition-all group relative h-28 overflow-hidden';
                 card.innerHTML = `
-                    <div class="w-16 h-16 mb-2 flex items-center justify-center group-hover:scale-110 transition-transform overflow-hidden pointer-events-none">
-                        ${asset.code}
+                    <div class="w-16 h-16 mb-2 flex items-center justify-center group-hover:scale-110 transition-transform overflow-hidden pointer-events-none" style="background:radial-gradient(circle, rgba(229,255,0,0.05) 0%, transparent 70%); border-radius:8px;">
+                        <div style="filter: brightness(1.5) contrast(1.1); max-width:100%; max-height:100%;">
+                            ${asset.code}
+                        </div>
                     </div>
                     <span class="text-[9px] text-muted font-tech uppercase tracking-wider text-center absolute bottom-2 group-hover:text-accent">${asset.name}</span>
                 `;
@@ -5190,9 +5328,15 @@
         };
         document.head.appendChild(interactScript);
 
+
         function updateEditorFromPreview() {
             const svgNode = svgTransformWrapper.querySelector('svg');
             if (!svgNode) return;
+
+            // PRESERVE SELECTION: capture IDs of selected elements before serializing
+            const selectedIds = selectedElements
+                .map(el => el.id || el.getAttribute('id'))
+                .filter(Boolean);
 
             // Clean up temporary DOM states
             const systemStyle = svgNode.querySelector('style[data-system-fix]');
@@ -5217,9 +5361,40 @@
 
             if (newCode !== currentCode) {
                 const scrollInfo = editor.getScrollInfo();
+                _skipPreviewUpdate = true;
                 editor.setValue(newCode);
+                _skipPreviewUpdate = false;
                 editor.scrollTo(scrollInfo.left, scrollInfo.top);
-                showToast('Code synced from preview');
+                // Re-inject system fixes that updatePreview would normally add
+                svgNode.style.overflow = 'visible';
+                let uiFixStyle = svgNode.querySelector('style[data-system-fix]');
+                if (!uiFixStyle) {
+                    uiFixStyle = document.createElementNS("http://www.w3.org/2000/svg", "style");
+                    uiFixStyle.setAttribute('data-system-fix', 'true');
+                    uiFixStyle.textContent = `
+                        svg { overflow: visible !important; }
+                        svg path, svg circle, svg rect, svg polygon, svg ellipse, svg line, svg text {
+                            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+                        }
+                        svg path:hover, svg circle:hover, svg rect:hover, svg polygon:hover, svg ellipse:hover {
+                            filter: brightness(1.3) drop-shadow(0px 0px 4px rgba(229, 255, 0, 0.4));
+                        }
+                    `;
+                    svgNode.insertBefore(uiFixStyle, svgNode.firstChild);
+                }
+            }
+
+            // RESTORE SELECTION: re-select by ID
+            if (selectedIds.length > 0) {
+                selectedElements = [];
+                selectedIds.forEach(id => {
+                    const el = svgTransformWrapper.querySelector(`[id="${id}"]`);
+                    if (el) {
+                        el.classList.add('el-selected');
+                        selectedElements.push(el);
+                    }
+                });
+                updatePropsTab();
             }
         }
 
@@ -6984,11 +7159,12 @@
             if (interactionMode === 'pan') {
                 svgPreviewContainer.style.cursor = isSpaceDown ? 'grab' : '';
             } else if (interactionMode === 'marquee') {
+                // IMPORTANT: Capture rect BEFORE hiding, otherwise getBoundingClientRect returns zeros
+                const mRect = marqueeBox.getBoundingClientRect();
                 marqueeContainerRect = null;
                 marqueeBox.style.display = 'none';
 
                 if (ptrMoved) {
-                    const mRect = marqueeBox.getBoundingClientRect();
                     if (mRect.width >= 5 || mRect.height >= 5) {
                         const svgRoot = svgTransformWrapper.querySelector('svg');
                         if (svgRoot) {
@@ -7035,6 +7211,208 @@
             interactionMode = 'none';
             ptrMoved = false;
         });
+
+        // ═══ PROPERTIES TAB LOGIC ═══
+        const propsEmpty = document.getElementById('propsEmpty');
+        const propsEditor = document.getElementById('propsEditor');
+        const propsTitle = document.getElementById('propsTitle');
+        const ecpWidth = document.getElementById('ecpWidth');
+        const ecpHeight = document.getElementById('ecpHeight');
+        const ecpPosX = document.getElementById('ecpPosX');
+        const ecpPosY = document.getElementById('ecpPosY');
+        const ecpPosXVal = document.getElementById('ecpPosXVal');
+        const ecpPosYVal = document.getElementById('ecpPosYVal');
+        const ecpOpacity2 = document.getElementById('ecpOpacity2');
+        const ecpOpacityVal2 = document.getElementById('ecpOpacityVal2');
+        const ecpFill2 = document.getElementById('ecpFill2');
+        const ecpStroke2 = document.getElementById('ecpStroke2');
+        const ecpStrokeWidth2 = document.getElementById('ecpStrokeWidth2');
+        const ecpScale2 = document.getElementById('ecpScale2');
+        const ecpScaleVal2 = document.getElementById('ecpScaleVal2');
+        const ecpRot2 = document.getElementById('ecpRot2');
+        const ecpRotVal2 = document.getElementById('ecpRotVal2');
+
+        function updatePropsTab() {
+            if (selectedElements.length === 0) {
+                propsEmpty.classList.remove('hidden');
+                propsEditor.classList.add('hidden');
+                propsEditor.classList.remove('flex');
+                return;
+            }
+            propsEmpty.classList.add('hidden');
+            propsEditor.classList.remove('hidden');
+            propsEditor.classList.add('flex');
+
+            const firstEl = selectedElements[0];
+            const isMulti = selectedElements.length > 1;
+
+            // Title
+            if (isMulti) {
+                propsTitle.textContent = `▸ MIXED (${selectedElements.length} elements)`;
+            } else {
+                const tag = firstEl.tagName.toLowerCase();
+                const id = firstEl.getAttribute('id');
+                propsTitle.textContent = `▸ <${tag}>${id ? ' #' + id : ''}`;
+            }
+
+            // Size (use getBBox for SVG elements)
+            try {
+                const bbox = firstEl.getBBox();
+                ecpWidth.value = Math.round(bbox.width);
+                ecpHeight.value = Math.round(bbox.height);
+            } catch(e) {
+                ecpWidth.value = '';
+                ecpHeight.value = '';
+            }
+
+            // Position
+            const tx = gsap.getProperty(firstEl, 'x') || 0;
+            const ty = gsap.getProperty(firstEl, 'y') || 0;
+            ecpPosX.value = Math.round(tx);
+            ecpPosY.value = Math.round(ty);
+            ecpPosXVal.textContent = Math.round(tx);
+            ecpPosYVal.textContent = Math.round(ty);
+
+            // Opacity
+            function getCommonProp2(attr, styleProp) {
+                const firstVal = firstEl.getAttribute(attr) || firstEl.style[styleProp] || '';
+                for (let i = 1; i < selectedElements.length; i++) {
+                    const val = selectedElements[i].getAttribute(attr) || selectedElements[i].style[styleProp] || '';
+                    if (val !== firstVal) return null;
+                }
+                return firstVal;
+            }
+
+            const op = getCommonProp2('opacity', 'opacity');
+            ecpOpacity2.value = op !== null ? parseFloat(op || '1') : 1;
+            ecpOpacityVal2.textContent = op !== null ? parseFloat(op || '1').toFixed(2) : 'MIX';
+
+            // Fill/Stroke
+            const fill = getCommonProp2('fill', 'fill');
+            const stroke = getCommonProp2('stroke', 'stroke');
+            const sw = getCommonProp2('stroke-width', 'strokeWidth');
+
+            const safeFill = fill || firstEl.getAttribute('fill') || '';
+            const safeStroke = stroke || firstEl.getAttribute('stroke') || '';
+
+            ecpFill2.value = safeFill && safeFill !== 'none' && safeFill.startsWith('#') ? normalizeToHex(safeFill) : '#000000';
+            ecpStroke2.value = safeStroke && safeStroke !== 'none' && safeStroke.startsWith('#') ? normalizeToHex(safeStroke) : '#E5FF00';
+            ecpStrokeWidth2.value = sw !== null ? (sw || '1') : '1';
+
+            // Transform
+            const sc = gsap.getProperty(firstEl, 'scale') || 1;
+            const rot = gsap.getProperty(firstEl, 'rotation') || 0;
+            ecpScale2.value = Number(sc).toFixed(2);
+            ecpScaleVal2.textContent = Number(sc).toFixed(2);
+            ecpRot2.value = Math.round(rot);
+            ecpRotVal2.textContent = Math.round(rot) + '°';
+        }
+
+        // ── Properties Tab Event Handlers ──
+        ecpPosX.addEventListener('input', () => {
+            ecpPosXVal.textContent = ecpPosX.value;
+            selectedElements.forEach(el => gsap.set(el, { x: parseFloat(ecpPosX.value) }));
+            updateEditorFromPreview();
+        });
+        ecpPosY.addEventListener('input', () => {
+            ecpPosYVal.textContent = ecpPosY.value;
+            selectedElements.forEach(el => gsap.set(el, { y: parseFloat(ecpPosY.value) }));
+            updateEditorFromPreview();
+        });
+        ecpOpacity2.addEventListener('input', () => {
+            ecpOpacityVal2.textContent = parseFloat(ecpOpacity2.value).toFixed(2);
+            selectedElements.forEach(el => el.setAttribute('opacity', ecpOpacity2.value));
+            updateEditorFromPreview();
+        });
+        ecpFill2.addEventListener('input', () => {
+            selectedElements.forEach(el => el.setAttribute('fill', ecpFill2.value));
+            updateEditorFromPreview();
+        });
+        ecpStroke2.addEventListener('input', () => {
+            selectedElements.forEach(el => el.setAttribute('stroke', ecpStroke2.value));
+            updateEditorFromPreview();
+        });
+        ecpStrokeWidth2.addEventListener('input', () => {
+            selectedElements.forEach(el => el.setAttribute('stroke-width', ecpStrokeWidth2.value));
+            updateEditorFromPreview();
+        });
+        ecpScale2.addEventListener('input', () => {
+            ecpScaleVal2.textContent = Number(ecpScale2.value).toFixed(2);
+            selectedElements.forEach(el => gsap.set(el, { scale: parseFloat(ecpScale2.value) }));
+            updateEditorFromPreview();
+        });
+        ecpRot2.addEventListener('input', () => {
+            ecpRotVal2.textContent = ecpRot2.value + '°';
+            selectedElements.forEach(el => gsap.set(el, { rotation: parseFloat(ecpRot2.value) }));
+            updateEditorFromPreview();
+        });
+        ecpWidth.addEventListener('change', () => {
+            if (selectedElements.length === 0) return;
+            const el = selectedElements[0];
+            const tag = el.tagName.toLowerCase();
+            const w = parseFloat(ecpWidth.value);
+            if (tag === 'rect' || tag === 'image' || tag === 'foreignObject') {
+                el.setAttribute('width', w);
+            } else if (tag === 'circle') {
+                el.setAttribute('r', w / 2);
+            } else if (tag === 'ellipse') {
+                el.setAttribute('rx', w / 2);
+            } else {
+                // For paths/groups, scale proportionally
+                try {
+                    const bbox = el.getBBox();
+                    if (bbox.width > 0) {
+                        const ratio = w / bbox.width;
+                        gsap.set(el, { scaleX: (gsap.getProperty(el, 'scaleX') || 1) * ratio });
+                    }
+                } catch(e) {}
+            }
+            updateEditorFromPreview();
+        });
+        ecpHeight.addEventListener('change', () => {
+            if (selectedElements.length === 0) return;
+            const el = selectedElements[0];
+            const tag = el.tagName.toLowerCase();
+            const h = parseFloat(ecpHeight.value);
+            if (tag === 'rect' || tag === 'image' || tag === 'foreignObject') {
+                el.setAttribute('height', h);
+            } else if (tag === 'circle') {
+                el.setAttribute('r', h / 2);
+            } else if (tag === 'ellipse') {
+                el.setAttribute('ry', h / 2);
+            } else {
+                try {
+                    const bbox = el.getBBox();
+                    if (bbox.height > 0) {
+                        const ratio = h / bbox.height;
+                        gsap.set(el, { scaleY: (gsap.getProperty(el, 'scaleY') || 1) * ratio });
+                    }
+                } catch(e) {}
+            }
+            updateEditorFromPreview();
+        });
+
+        // Wire align/distribute/delete buttons to reuse existing ECP handlers
+        document.getElementById('ecpDeleteBtn2').addEventListener('click', () => ecpDeleteBtn.click());
+        document.getElementById('ecpStripAnimBtn2').addEventListener('click', () => ecpStripAnimBtn.click());
+        document.getElementById('ecpAlignLeftBtn2').addEventListener('click', () => ecpAlignLeftBtn.click());
+        document.getElementById('ecpAlignCenterBtn2').addEventListener('click', () => ecpAlignCenterBtn.click());
+        document.getElementById('ecpAlignRightBtn2').addEventListener('click', () => ecpAlignRightBtn.click());
+        document.getElementById('ecpAlignTopBtn2').addEventListener('click', () => ecpAlignTopBtn.click());
+        document.getElementById('ecpAlignMiddleBtn2').addEventListener('click', () => ecpAlignMiddleBtn.click());
+        document.getElementById('ecpAlignBottomBtn2').addEventListener('click', () => ecpAlignBottomBtn.click());
+        document.getElementById('ecpDistHorizBtn2').addEventListener('click', () => ecpDistHorizBtn.click());
+        document.getElementById('ecpDistVertBtn2').addEventListener('click', () => ecpDistVertBtn.click());
+
+        // ── Auto-switch to Properties tab on selection ──
+        const origUpdateECP = updateECP;
+        updateECP = function() {
+            origUpdateECP();
+            updatePropsTab();
+            if (selectedElements.length > 0) {
+                switchLeftTab('properties');
+            }
+        };
 
 </script>
 
