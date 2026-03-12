@@ -3651,7 +3651,7 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
             ecpStrokeWidth.value = sw !== null ? (sw || '1') : '';
             if (sw === null) ecpStrokeWidth.placeholder = 'MIX'; else ecpStrokeWidth.placeholder = '';
 
-            
+
             const getAttr = (attr) => {
                 const val = firstEl.getAttribute(attr);
                 if (!isMulti) return val;
@@ -3679,10 +3679,10 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
             }
 
 
-            
-            
-            
-            
+
+
+
+
             if (ecpStrokeDash) {
                 const sDash = firstEl.getAttribute('stroke-dasharray');
                 ecpStrokeDash.value = (sDash && sDash !== 'none') ? sDash : '';
@@ -4375,9 +4375,9 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
             showToast(`Stroke → ${ecpStroke.value}`);
         });
 
-        
-        
-        
+
+
+
         if (ecpStrokeDash) {
             ecpStrokeDash.addEventListener('input', (e) => {
                 if (selectedElements.length === 0) return;
@@ -5363,13 +5363,13 @@ window.openReactExportModal = function() {
     if (!svgWrapper) { console.error("No svg wrapper found"); return; }
     const svgElement = svgWrapper.querySelector('svg');
     if (!svgElement) { console.error("No svg element found"); return; }
-    
+
     const clone = svgElement.cloneNode(true);
     clone.querySelectorAll('[data-id], .selectable-element').forEach(el => {
         el.removeAttribute('data-id');
         el.classList.remove('selectable-element', 'selected');
     });
-    
+
     // In our app, animations is a global variable
     let animData = [];
     if (typeof animations !== 'undefined') {
@@ -5377,7 +5377,7 @@ window.openReactExportModal = function() {
     } else if (typeof window.animations !== 'undefined') {
         animData = window.animations;
     }
-    
+
     const timelineData = animData.map(anim => {
         let propsCopy = { ...anim.props, duration: anim.duration || 1 };
         if (anim.ease) propsCopy.ease = anim.ease;
@@ -5388,18 +5388,18 @@ window.openReactExportModal = function() {
             startTime: anim.startTime || 0
         };
     });
-    
+
     let svgString = clone.outerHTML;
     svgString = svgString.replace(/ ([a-z]+)-([a-z]+)=/g, (match, p1, p2) => ` ${p1}${p2.charAt(0).toUpperCase() + p2.slice(1)}=`);
     svgString = svgString.replace(/ class=/g, ' className=');
-    
+
     // Standard problematic SVG attrs
     const fixAttrs = ['stroke-width', 'stroke-linecap', 'stroke-linejoin', 'fill-rule', 'clip-rule', 'stroke-dasharray', 'stroke-dashoffset'];
     fixAttrs.forEach(attr => {
         const camel = attr.split('-')[0] + attr.split('-')[1].charAt(0).toUpperCase() + attr.split('-')[1].slice(1);
         svgString = svgString.replace(new RegExp(` ${attr}=`, 'g'), ` ${camel}=`);
     });
-    
+
     const componentName = 'AnimatedSVG';
     let jsxComponent = `import React, { useEffect, useRef } from 'react';\nimport gsap from 'gsap';\n\nexport const ${componentName} = () => {\n  const svgRef = useRef(null);\n\n  useEffect(() => {\n    const ctx = gsap.context(() => {\n      const tl = gsap.timeline();\n`;
 
@@ -5411,7 +5411,7 @@ window.openReactExportModal = function() {
     });
 
     jsxComponent += `    }, svgRef);\n\n    return () => ctx.revert();\n  }, []);\n\n  return (\n    <div ref={svgRef}>\n      ${svgString}\n    </div>\n  );\n};\n`;
-    
+
     const modal = document.createElement('div');
     modal.innerHTML = `<div style="position:fixed;top:10%;left:10%;width:80%;height:80%;background:#1a1a24;z-index:9999;border:1px solid #E5FF00;padding:20px;display:flex;flex-direction:column;box-shadow:0 0 20px rgba(0,0,0,0.8);">
         <h3 style="color:#E5FF00;margin:0 0 10px 0;font-family:monospace;font-size:18px;">React JSX Component</h3>
@@ -5419,7 +5419,7 @@ window.openReactExportModal = function() {
         <textarea id="jsxTextArea" style="flex:1;width:100%;background:#0f0f15;color:#00ffcc;font-family:monospace;padding:15px;border:1px solid #333;outline:none;resize:none;margin-bottom:15px;">${jsxComponent}</textarea>
         <button id="copyJsxBtn" style="padding:12px;background:#E5FF00;color:#000;border:none;cursor:pointer;font-weight:bold;font-family:monospace;text-transform:uppercase;">Copy to Clipboard</button>
     </div>`;
-    
+
     document.body.appendChild(modal);
     document.getElementById('closeJsxBtn').onclick = () => modal.remove();
     document.getElementById('copyJsxBtn').onclick = (e) => {
@@ -5431,8 +5431,8 @@ window.openReactExportModal = function() {
 
 
         // STR0KE ENHANCEMENTS UI
-        
-        
+
+
         if (ecpStrokeDash) {
             ecpStrokeDash.addEventListener('input', (e) => {
                 if (!selectedElement) return;
@@ -5477,7 +5477,7 @@ window.setTool = function(toolName) {
     const mBtn = document.getElementById('marqueeToolBtn');
     const pBtn = document.getElementById('panToolBtn');
     const container = document.getElementById('svgPreviewContainer');
-    
+
     if(mBtn && pBtn && container) {
         if(toolName === 'marquee') {
             mBtn.classList.replace('text-muted', 'text-accent');
@@ -5485,7 +5485,7 @@ window.setTool = function(toolName) {
             pBtn.classList.replace('text-accent', 'text-muted');
             pBtn.classList.replace('border-accent', 'border-border');
             container.style.cursor = 'crosshair';
-            
+
             // Disable dragging
             if (typeof draggableInstances !== 'undefined') {
                 draggableInstances.forEach(d => {
@@ -5498,7 +5498,7 @@ window.setTool = function(toolName) {
             mBtn.classList.replace('text-accent', 'text-muted');
             mBtn.classList.replace('border-accent', 'border-border');
             container.style.cursor = 'grab';
-            
+
             // Enable dragging
             if (typeof draggableInstances !== 'undefined') {
                 draggableInstances.forEach(d => {
