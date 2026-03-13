@@ -2168,7 +2168,7 @@
             const elArray = elements ? (elements instanceof NodeList || Array.isArray(elements) ? Array.from(elements) : [elements]) : [svg];
             let count = 0;
 
-            const animationKeywords = /anim|holo|aura|mosh|crt|heat|liquid|glow|pixel|cycle|glitch|spectrum|neon|cyber|scan|wiggle|echo|typewriter|wipe|flip|jelly/i;
+            const animationKeywords = /anim|holo|aura|mosh|crt|heat|liquid|glow|pixel|cycle|glitch|spectrum|neon|cyber|scan|wiggle|echo|typewriter|wipe|flip|jelly|draw|dash|stroke/i;
 
             elArray.forEach(el => {
                 if (!el.querySelectorAll || !el.removeAttribute) return;
@@ -2179,12 +2179,26 @@
                 
                 // 2. CSS Classes & Inline Style
                 if (options.all) {
-                    const toRemove = Array.from(el.classList).filter(c => c.startsWith('anim-'));
-                    toRemove.forEach(c => { el.classList.remove(c); count++; });
-                    if (el.style && el.style.animation) { el.style.animation = ''; count++; }
+                    const elementsToClean = el.querySelectorAll ? [el, ...Array.from(el.querySelectorAll('[class], [style]'))] : [el];
+                    elementsToClean.forEach(target => {
+                        if (target.classList) {
+                            const toRemove = Array.from(target.classList).filter(c => c.startsWith('anim-'));
+                            toRemove.forEach(c => { target.classList.remove(c); count++; });
+                        }
+                        if (target.style && target.style.animation) { target.style.animation = ''; count++; }
+                    });
                 } else if (options.type) {
                     const c = `anim-${options.type}`;
-                    if (el.classList.contains(c)) { el.classList.remove(c); count++; }
+                    const elementsToClean = el.querySelectorAll ? [el, ...Array.from(el.querySelectorAll(`.${c}`))] : [el];
+                    elementsToClean.forEach(target => {
+                        if (target.classList && target.classList.contains(c)) {
+                            target.classList.remove(c); count++;
+                        }
+                        // Also clear inline animation if it matches the name
+                        if (target.style && target.style.animation && target.style.animation.includes(options.type)) {
+                            target.style.animation = ''; count++;
+                        }
+                    });
                 }
 
                 // 3. Filters & Masks targeting our generated IDs
@@ -2222,20 +2236,25 @@
                     });
                 });
 
-                // Clean up <style> tag
+            // 5. Global Style Cleanup (Always clean orphaned anim classes if all:true)
+            if (options.all) {
                 svg.querySelectorAll('style').forEach(styleEl => {
                     let css = styleEl.textContent;
-                    // Remove @keyframes
-                    css = css.replace(/@keyframes\s+[\w-]+\s*\{(?:[^{}]*|\{[^{}]*\})*\}/g, (match) => {
-                        if (animationKeywords.test(match)) { count++; return ''; }
-                        return match;
-                    });
-                    // Remove .anim-* classes
+                    // Remove `.anim-*` classes from style tag
                     css = css.replace(/\.anim-[\w-]+\s*\{[^}]*\}/g, () => { count++; return ''; });
                     
+                    // If stripping everything (not just elements), also remove @keyframes matching keywords
+                    if (!elements) {
+                        css = css.replace(/@keyframes\s+[\w-]+\s*\{(?:[^{}]*|\{[^{}]*\})*\}/g, (match) => {
+                            if (animationKeywords.test(match)) { count++; return ''; }
+                            return match;
+                        });
+                    }
+                    
                     styleEl.textContent = css.trim();
-                    if (!styleEl.textContent) { styleEl.remove(); count++; }
+                    if (!styleEl.textContent && !elements) { styleEl.remove(); count++; }
                 });
+            }
             }
 
             return count;
@@ -2265,12 +2284,14 @@
 
             if (!svg) return showToast('No valid SVG found to animate.', true);
 
-            // Ensure a style tag exists for CSS keyframes
-            let style = svg.querySelector('style');
-            if (!style) {
-                style = doc.createElementNS("http://www.w3.org/2000/svg", "style");
-                svg.insertBefore(style, svg.firstChild);
-            }
+            // Guarantee IDs for selected elements so we can find them in the parsed doc
+            selectedElements.forEach(el => {
+                if (!el.id) {
+                    el.id = 'anim-target-' + Math.random().toString(36).substr(2, 9);
+                }
+            });
+
+            // Let setup happen after stripping to avoid detached element bugs
 
             // Check if there's a selected group we should apply stagger to
             const applyStagger = parseFloat(stagger) > 0;
@@ -2381,20 +2402,26 @@
             };
             const cssEasing = gsapToCss[easing] || easing;
 
-            const animProps = `${duration}s ${cssEasing} ${delay}s ${iteration} ${direction}`;
+            const animProps = `${duration}s ${cssEasing} ${delay}s ${iteration} ${direction} forwards`;
             const originStyle = `transform-origin: ${origin}; transform-box: fill-box;`;
 
-            // ═══ CENTRALIZED STRIPPING ═══
-            // We strip animations from the relevant targets before applying new ones.
-            // If staggerTargets exists, we strip them specifically.
-            // Otherwise, we strip the entire SVG (if no selection) or just the selected elements.
+            // ═══ TARGETED STRIPPING (FOR STACKING) ═══
+            // We only strip the SAME animation type to allow updating/restacking.
+            // Other unrelated animations will now persist!
             let stripTargets = null; 
             if (staggerTargets && staggerTargets.length > 0) {
                 stripTargets = staggerTargets;
             } else if (selectedElements.length > 0) {
                 stripTargets = selectedElements.map(el => doc.getElementById(el.id)).filter(Boolean);
             }
-            stripAnimations(doc, stripTargets, { all: true });
+            stripAnimations(doc, stripTargets, { all: false, type: type });
+
+            // Ensure a style tag exists for CSS keyframes (MUST BE AFTER STRIPPING)
+            let style = svg.querySelector('style');
+            if (!style) {
+                style = doc.createElementNS("http://www.w3.org/2000/svg", "style");
+                svg.insertBefore(style, svg.firstChild);
+            }
 
 
             if (type === 'spin') {
@@ -3486,12 +3513,6 @@
                     uiFixStyle.setAttribute('data-system-fix', 'true');
                     uiFixStyle.textContent = `
                         svg { overflow: visible !important; }
-                        svg path, svg circle, svg rect, svg polygon, svg ellipse, svg line, svg text {
-                            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-                        }
-                        svg path:hover, svg circle:hover, svg rect:hover, svg polygon:hover, svg ellipse:hover {
-                            filter: brightness(1.3) drop-shadow(0px 0px 4px rgba(229, 255, 0, 0.4));
-                        }
                     `;
                     svgNode.insertBefore(uiFixStyle, svgNode.firstChild);
                 }
@@ -5550,12 +5571,6 @@
                     uiFixStyle.setAttribute('data-system-fix', 'true');
                     uiFixStyle.textContent = `
                         svg { overflow: visible !important; }
-                        svg path, svg circle, svg rect, svg polygon, svg ellipse, svg line, svg text {
-                            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-                        }
-                        svg path:hover, svg circle:hover, svg rect:hover, svg polygon:hover, svg ellipse:hover {
-                            filter: brightness(1.3) drop-shadow(0px 0px 4px rgba(229, 255, 0, 0.4));
-                        }
                     `;
                     svgNode.insertBefore(uiFixStyle, svgNode.firstChild);
                 }
