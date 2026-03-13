@@ -6994,6 +6994,8 @@
         let marqueeStart = { x: 0, y: 0 };
         let marqueeContainerRect = null;
         let panRAF = null;
+        let pointerMoveRAF = null;
+        let latestPointerEvent = null;
 
         let marqueeBox = document.createElement('div');
         marqueeBox.className = 'marquee-box';
@@ -7166,29 +7168,41 @@
                 });
             } else if (interactionMode === 'marquee') {
                 if (!marqueeContainerRect) return;
-                const currentX = e.clientX - marqueeContainerRect.left;
-                const currentY = e.clientY - marqueeContainerRect.top;
+                latestPointerEvent = e;
+                if (pointerMoveRAF) return;
+                pointerMoveRAF = requestAnimationFrame(() => {
+                    if (!latestPointerEvent) return;
+                    const currentX = latestPointerEvent.clientX - marqueeContainerRect.left;
+                    const currentY = latestPointerEvent.clientY - marqueeContainerRect.top;
 
-                const x = Math.min(marqueeStart.x, currentX);
-                const y = Math.min(marqueeStart.y, currentY);
-                const w = Math.abs(currentX - marqueeStart.x);
-                const h = Math.abs(currentY - marqueeStart.y);
+                    const x = Math.min(marqueeStart.x, currentX);
+                    const y = Math.min(marqueeStart.y, currentY);
+                    const w = Math.abs(currentX - marqueeStart.x);
+                    const h = Math.abs(currentY - marqueeStart.y);
 
-                marqueeBox.style.left = x + 'px';
-                marqueeBox.style.top = y + 'px';
-                marqueeBox.style.width = w + 'px';
-                marqueeBox.style.height = h + 'px';
+                    marqueeBox.style.left = x + 'px';
+                    marqueeBox.style.top = y + 'px';
+                    marqueeBox.style.width = w + 'px';
+                    marqueeBox.style.height = h + 'px';
+                    pointerMoveRAF = null;
+                });
             } else if (interactionMode === 'drag') {
-                const dx = (e.clientX - ptrStartX) / scale;
-                const dy = (e.clientY - ptrStartY) / scale;
-                
-                selectedElements.forEach(el => {
-                    const startPos = dragOffsets.get(el);
-                    if (startPos) {
-                        const newX = startPos.tx + dx;
-                        const newY = startPos.ty + dy;
-                        el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
-                    }
+                latestPointerEvent = e;
+                if (pointerMoveRAF) return;
+                pointerMoveRAF = requestAnimationFrame(() => {
+                    if (!latestPointerEvent) return;
+                    const dx = (latestPointerEvent.clientX - ptrStartX) / scale;
+                    const dy = (latestPointerEvent.clientY - ptrStartY) / scale;
+
+                    selectedElements.forEach(el => {
+                        const startPos = dragOffsets.get(el);
+                        if (startPos) {
+                            const newX = startPos.tx + dx;
+                            const newY = startPos.ty + dy;
+                            el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
+                        }
+                    });
+                    pointerMoveRAF = null;
                 });
             }
         });
@@ -7251,6 +7265,12 @@
                     updateEditorFromPreview();
                 }
             }
+
+            if (pointerMoveRAF) {
+                cancelAnimationFrame(pointerMoveRAF);
+                pointerMoveRAF = null;
+            }
+            latestPointerEvent = null;
 
             interactionMode = 'none';
             ptrMoved = false;
