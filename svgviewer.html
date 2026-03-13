@@ -2159,6 +2159,89 @@
             }
         });
 
+        // ═══ CENTRALIZED ANIMATION STRIPPING ═══
+        function stripAnimations(doc, elements = null, options = { all: true, type: null }) {
+            const svg = doc.querySelector('svg');
+            if (!svg) return 0;
+            
+            // If elements is null, we strip the entire SVG
+            const elArray = elements ? (elements instanceof NodeList || Array.isArray(elements) ? Array.from(elements) : [elements]) : [svg];
+            let count = 0;
+
+            const animationKeywords = /anim|holo|aura|mosh|crt|heat|liquid|glow|pixel|cycle|glitch|spectrum|neon|cyber|scan|wiggle|echo|typewriter|wipe|flip|jelly/i;
+
+            elArray.forEach(el => {
+                if (!el.querySelectorAll || !el.removeAttribute) return;
+                
+                // 1. Remove SMIL animation elements
+                const smilSelector = options.type ? `animate[attributeName*="${options.type}"], animateTransform[attributeName*="${options.type}"], animateMotion, set` : 'animate, animateTransform, animateMotion, set';
+                el.querySelectorAll(smilSelector).forEach(a => { a.remove(); count++; });
+                
+                // 2. CSS Classes & Inline Style
+                if (options.all) {
+                    const toRemove = Array.from(el.classList).filter(c => c.startsWith('anim-'));
+                    toRemove.forEach(c => { el.classList.remove(c); count++; });
+                    if (el.style && el.style.animation) { el.style.animation = ''; count++; }
+                } else if (options.type) {
+                    const c = `anim-${options.type}`;
+                    if (el.classList.contains(c)) { el.classList.remove(c); count++; }
+                }
+
+                // 3. Filters & Masks targeting our generated IDs
+                const f = el.getAttribute('filter');
+                if (f) {
+                    if (options.all || (options.type && (f.includes(options.type) || f.includes('anim'))) || animationKeywords.test(f)) {
+                        el.removeAttribute('filter'); count++;
+                    }
+                }
+                const m = el.getAttribute('mask');
+                if (m) {
+                    if (options.all || (options.type && (m.includes(options.type) || m.includes('anim'))) || animationKeywords.test(m)) {
+                        el.removeAttribute('mask'); count++;
+                    }
+                }
+                const cp = el.getAttribute('clip-path');
+                if (cp && animationKeywords.test(cp)) {
+                    el.removeAttribute('clip-path'); count++;
+                }
+            });
+
+            // 4. Global Cleanup (Defs & Style) - only if stripping entire SVG
+            if (options.all && !elements) {
+                // Remove orphaned filter/mask/gradient/pattern elements in <defs>
+                const defsSelectors = [
+                    '[id*="anim"]', '[id*="holo"]', '[id*="aura"]', '[id^="spectrum"]', 
+                    '[id*="mosh"]', '[id*="crt"]', '[id*="heat"]', '[id*="liquid"]',
+                    '[id*="cyber"]', '[id*="scan"]', '[id*="pixel"]', '[id*="echo"]',
+                    '[id*="motionBlur"]', '[id*="glitch"]'
+                ];
+                defsSelectors.forEach(sel => {
+                    svg.querySelectorAll(`defs ${sel}`).forEach(defEl => {
+                        defEl.remove();
+                        count++;
+                    });
+                });
+
+                // Clean up <style> tag
+                svg.querySelectorAll('style').forEach(styleEl => {
+                    let css = styleEl.textContent;
+                    // Remove @keyframes
+                    css = css.replace(/@keyframes\s+[\w-]+\s*\{(?:[^{}]*|\{[^{}]*\})*\}/g, (match) => {
+                        if (animationKeywords.test(match)) { count++; return ''; }
+                        return match;
+                    });
+                    // Remove .anim-* classes
+                    css = css.replace(/\.anim-[\w-]+\s*\{[^}]*\}/g, () => { count++; return ''; });
+                    
+                    styleEl.textContent = css.trim();
+                    if (!styleEl.textContent) { styleEl.remove(); count++; }
+                });
+            }
+
+            return count;
+        }
+
+
         function applyCustomAnimation(type, duration, easing, direction, delay, iteration, origin, intensity, stagger, staggerFrom) {
 
             // Critical fix: Ensure any temp IDs added dynamically (stagger-target, wrap-target)
@@ -2301,40 +2384,18 @@
             const animProps = `${duration}s ${cssEasing} ${delay}s ${iteration} ${direction}`;
             const originStyle = `transform-origin: ${origin}; transform-box: fill-box;`;
 
-            // Fix: Strip ONLY the keyframe and class for the CURRENT animation type (preserves other stacked animations)
-            const typeToKeyframes = {
-                'spin': ['spin'], 'pulse': ['pulse'], 'float': ['float'], 'shake': ['shake'],
-                'fade': ['fade'], 'bounce': ['bounce'], 'orbit': ['orbitAnim'],
-                'draw': ['drawLine'], 'draw-loop': ['drawLoop'], 'dash-march': ['dashMarch'],
-                'draw-erase': ['drawErase'], 'dash-flow': ['dashFlow'],
-                'adv-stroke-draw': ['advStrokeDraw'], 'adv-stroke-beam': ['advStrokeBeam'], 'adv-stroke-dash': ['advStrokeDash'],
-                'neon': ['neonPulse'], 'rubberband': ['rubberband'], 'swing': ['swing3d'],
-                'glitch-shake': ['glitchShake'], 'glitch': ['glitchJitter'],
-                'cyber-sweep': [], 'spectrum-flow': [], 'vortex-gradient': [], 'antigravity-aura': []
-            };
-            const typeToClass = {
-                'spin': 'anim-spin', 'pulse': 'anim-pulse', 'float': 'anim-float', 'shake': 'anim-shake',
-                'fade': 'anim-fade', 'bounce': 'anim-bounce', 'orbit': 'anim-orbit',
-                'draw': 'anim-draw', 'draw-loop': 'anim-draw-loop', 'dash-march': 'anim-dash-march',
-                'draw-erase': 'anim-draw-erase', 'dash-flow': 'anim-dash-flow',
-                'adv-stroke-draw': 'anim-adv-stroke-draw', 'adv-stroke-beam': 'anim-adv-stroke-beam', 'adv-stroke-dash': 'anim-adv-stroke-dash',
-                'neon': 'anim-neon-pulse', 'rubberband': 'anim-rubber', 'swing': 'anim-swing',
-                'glitch-shake': 'anim-glitch-shake', 'glitch': 'anim-glitch'
-            };
-            const kfNames = typeToKeyframes[type] || [];
-            const clsName = typeToClass[type] || '';
-            kfNames.forEach(kf => {
-                const kfRegex = new RegExp(`@keyframes\\s+${kf}\\s*\\{[^}]*\\{[^}]*\\}\\s*\\}`, 'g');
-                style.textContent = style.textContent.replace(kfRegex, '');
-                // Also try simpler single-brace keyframes
-                const kfRegex2 = new RegExp(`@keyframes\\s+${kf}\\s*\\{[\\s\\S]*?\\}\\s*\\}`, 'g');
-                style.textContent = style.textContent.replace(kfRegex2, '');
-            });
-            if (clsName) {
-                const clsRegex = new RegExp(`\\.${clsName.replace('-', '\\-')}\\s*\\{[^}]*\\}`, 'g');
-                style.textContent = style.textContent.replace(clsRegex, '');
+            // ═══ CENTRALIZED STRIPPING ═══
+            // We strip animations from the relevant targets before applying new ones.
+            // If staggerTargets exists, we strip them specifically.
+            // Otherwise, we strip the entire SVG (if no selection) or just the selected elements.
+            let stripTargets = null; 
+            if (staggerTargets && staggerTargets.length > 0) {
+                stripTargets = staggerTargets;
+            } else if (selectedElements.length > 0) {
+                stripTargets = selectedElements.map(el => doc.getElementById(el.id)).filter(Boolean);
             }
-            style.textContent = style.textContent.replace(/\n{3,}/g, '\n').trim();
+            stripAnimations(doc, stripTargets, { all: true });
+
 
             if (type === 'spin') {
                 style.textContent += `\n@keyframes spin { 100% { transform: rotate(360deg); } }`;
@@ -2502,13 +2563,83 @@
                     return;
                 }
             } else if (type === 'holo') {
-                if (!svg.querySelector('#holoFilter')) {
-                    const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
-                    filter.setAttribute("id", "holoFilter");
-                    filter.innerHTML = `<feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="3" result="noise"><animate attributeName="baseFrequency" values="0.01;0.015;0.01" dur="${duration}s" repeatCount="indefinite"/></feTurbulence><feColorMatrix type="hueRotate" values="0"><animate attributeName="values" from="0" to="360" dur="${duration}s" repeatCount="indefinite"/></feColorMatrix><feComponentTransfer><feFuncA type="linear" slope="0.8"/></feComponentTransfer><feBlend in="SourceGraphic" in2="noise" mode="screen"/>`;
-                    svg.insertBefore(filter, svg.firstChild);
-                }
+                // Clear old
+                const existing = svg.querySelector('#holoFilter');
+                if (existing) existing.remove();
+
+                const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
+                filter.setAttribute("id", "holoFilter");
+                filter.setAttribute("x", "-20%"); filter.setAttribute("y", "-20%");
+                filter.setAttribute("width", "140%"); filter.setAttribute("height", "140%");
+                filter.innerHTML = `
+                    <feTurbulence type="fractalNoise" baseFrequency="0.05 0.5" numOctaves="2" result="noise">
+                        <animate attributeName="baseFrequency" values="0.05 0.5;0.1 0.1;0.05 0.5" dur="${duration}s" repeatCount="indefinite"/>
+                    </feTurbulence>
+                    <feColorMatrix in="noise" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.5 0" result="shimmer"/>
+                    <feComposite in="shimmer" in2="SourceGraphic" operator="in" result="clipped"/>
+                    <feBlend in="SourceGraphic" in2="clipped" mode="screen"/>
+                `;
+                svg.insertBefore(filter, svg.firstChild);
                 applyClassToTargets('', el => el.setAttribute('filter', 'url(#holoFilter)'));
+            } else if (type === 'spectrum-flow') {
+                const existingS = svg.querySelector('#spectrumFilter');
+                if (existingS) existingS.remove();
+                const existingM = svg.querySelector('#spectrumMask');
+                if (existingM) existingM.remove();
+                const existingG = svg.querySelector('#spectrumGrad');
+                if (existingG) existingG.remove();
+
+                const defs = svg.querySelector('defs') || doc.createElementNS("http://www.w3.org/2000/svg", "defs");
+                if (!svg.querySelector('defs')) svg.insertBefore(defs, svg.firstChild);
+                
+                defs.innerHTML += `
+                    <linearGradient id="spectrumGrad" x1="0%" y1="0%" x2="400%" y2="0%" spreadMethod="repeat">
+                        <stop offset="0%" stop-color="#ff0000" /><stop offset="5%" stop-color="#ffff00" />
+                        <stop offset="10%" stop-color="#00ff00" /><stop offset="15%" stop-color="#00ffff" />
+                        <stop offset="20%" stop-color="#0000ff" /><stop offset="25%" stop-color="#ff00ff" />
+                        <stop offset="30%" stop-color="#ff0000" />
+                        <animateTransform attributeName="gradientTransform" type="translate" values="0,0;-2,0" dur="${duration}s" repeatCount="indefinite" />
+                    </linearGradient>
+                    <mask id="spectrumMask" maskUnits="objectBoundingBox">
+                         <rect width="100%" height="100%" fill="url(#spectrumGrad)" />
+                    </mask>`;
+
+                const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
+                filter.setAttribute("id", "spectrumFilter");
+                filter.innerHTML = `<feFlood flood-color="white" result="w"/><feComposite in="w" in2="SourceGraphic" operator="atop"/>`;
+                svg.insertBefore(filter, svg.firstChild);
+
+                applyClassToTargets('', el => {
+                    el.setAttribute('mask', 'url(#spectrumMask)');
+                    el.setAttribute('filter', 'url(#spectrumFilter)');
+                });
+
+            } else if (type === 'antigravity-aura') {
+                const existing = svg.querySelector('#auraFilter');
+                if (existing) existing.remove();
+
+                const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
+                filter.setAttribute("id", "auraFilter");
+                filter.setAttribute("x", "-50%"); filter.setAttribute("y", "-50%");
+                filter.setAttribute("width", "200%"); filter.setAttribute("height", "200%");
+                filter.innerHTML = `
+                    <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="3" result="noise">
+                        <animate attributeName="baseFrequency" values="0.02;0.05;0.02" dur="${duration}s" repeatCount="indefinite"/>
+                    </feTurbulence>
+                    <feDisplacementMap in="SourceGraphic" in2="noise" scale="${20 * intensity}" result="displaced"/>
+                    <feGaussianBlur in="displaced" stdDeviation="${3 * intensity}" result="blur"/>
+                    <feColorMatrix in="blur" type="hueRotate" values="0" result="glow">
+                        <animate attributeName="values" from="0" to="360" dur="${duration * 2}s" repeatCount="indefinite"/>
+                    </feColorMatrix>
+                    <feMerge>
+                        <feMergeNode in="glow"/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                `;
+                svg.insertBefore(filter, svg.firstChild);
+                applyClassToTargets('', el => {
+                    el.setAttribute('filter', 'url(#auraFilter)');
+                });
             } else if (type === 'crt') {
                 if (!svg.querySelector('#crtFilter')) {
                     const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
@@ -2588,13 +2719,23 @@
                 style.textContent += `\n.anim-echo { animation: echoMove ${duration}s ease-in-out infinite; filter: url(#echoFilter); }\n`;
                 applyClassToTargets('anim-echo');
             } else if (type === 'liquid') {
-                if (!svg.querySelector('#liquidFilter')) {
-                    const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
-                    filter.setAttribute("id", "liquidFilter");
-                    const lScale = 20 * intensity;
-                    filter.innerHTML = `<feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="3" result="noise"><animate attributeName="baseFrequency" values="0.02;0.05;0.02" dur="${duration}s" repeatCount="indefinite"/></feTurbulence><feDisplacementMap in="SourceGraphic" in2="noise" scale="${lScale}" xChannelSelector="R" yChannelSelector="B"/>`;
-                    svg.insertBefore(filter, svg.firstChild);
-                }
+                const existing = svg.querySelector('#liquidFilter');
+                if (existing) existing.remove();
+
+                const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
+                filter.setAttribute("id", "liquidFilter");
+                filter.setAttribute("x", "-20%"); filter.setAttribute("y", "-20%");
+                filter.setAttribute("width", "140%"); filter.setAttribute("height", "140%");
+                const lScale = 30 * intensity;
+                filter.innerHTML = `
+                    <feTurbulence type="fractalNoise" baseFrequency="0.02 0.05" numOctaves="3" result="noise">
+                        <animate attributeName="baseFrequency" values="0.02 0.05;0.04 0.08;0.02 0.05" dur="${duration}s" repeatCount="indefinite"/>
+                    </feTurbulence>
+                    <feDisplacementMap in="SourceGraphic" in2="noise" scale="${lScale}" xChannelSelector="R" yChannelSelector="G" result="distorted"/>
+                    <feGaussianBlur in="distorted" stdDeviation="1" result="soft"/>
+                    <feComposite in="soft" in2="SourceGraphic" operator="in"/>
+                `;
+                svg.insertBefore(filter, svg.firstChild);
                 applyClassToTargets('', el => el.setAttribute('filter', 'url(#liquidFilter)'));
             } else if (type === 'typewriter') {
                 if (!style.textContent.includes('@keyframes typewriter')) style.textContent += `\n@keyframes typewriter { 0% { clip-path: inset(0 100% 0 0); } 100% { clip-path: inset(0 0 0 0); } }`;
@@ -2605,8 +2746,18 @@
                 style.textContent += `\n.anim-wipe { animation: wipeReveal ${animProps}; }\n`;
                 applyClassToTargets('anim-wipe');
             } else if (type === 'flip-card') {
-                if (!style.textContent.includes('@keyframes flipCard')) style.textContent += `\n@keyframes flipCard { 0% { transform: perspective(600px) rotateY(0deg); } 50% { transform: perspective(600px) rotateY(180deg); } 100% { transform: perspective(600px) rotateY(360deg); } }`;
-                style.textContent += `\n.anim-flip { animation: flipCard ${animProps}; ${originStyle} transform-style: preserve-3d; }\n`;
+                if (!style.textContent.includes('@keyframes flipCard')) {
+                    style.textContent += `
+                        @keyframes flipCard { 
+                             0% { transform: perspective(1000px) rotateY(0deg); opacity: 1; }
+                             25% { transform: perspective(1000px) rotateY(90deg); opacity: 0.8; }
+                             50% { transform: perspective(1000px) rotateY(180deg); opacity: 1; }
+                             75% { transform: perspective(1000px) rotateY(270deg); opacity: 0.8; }
+                             100% { transform: perspective(1000px) rotateY(360deg); opacity: 1; }
+                        }
+                    `;
+                }
+                style.textContent += `\n.anim-flip { animation: flipCard ${duration}s ${delay}s cubic-bezier(0.4, 0, 0.2, 1) ${iteration}; ${originStyle} transform-style: preserve-3d; }\n`;
                 applyClassToTargets('anim-flip');
             } else if (type === 'jelly') {
                 if (!style.textContent.includes('@keyframes jellyWobble')) style.textContent += `\n@keyframes jellyWobble { 0% { transform: scale(1, 1); } 25% { transform: scale(0.9, 1.1); } 50% { transform: scale(1.1, 0.9); } 75% { transform: scale(0.95, 1.05); } 100% { transform: scale(1, 1); } }`;
@@ -2643,34 +2794,22 @@
                     svg.insertBefore(filter, svg.firstChild);
                 }
                 applyClassToTargets('', el => el.setAttribute('filter', 'url(#colorCycleFilter)'));
-            } else if (type === 'spectrum-flow') {
-                if (!svg.querySelector('#spectrumGrad')) {
-                    const defs = svg.querySelector('defs') || doc.createElementNS("http://www.w3.org/2000/svg", "defs");
-                    if (!svg.querySelector('defs')) svg.insertBefore(defs, svg.firstChild);
-                    defs.innerHTML += `
-                        <linearGradient id="spectrumGrad" x1="0%" y1="0%" x2="200%" y2="0%" gradientUnits="userSpaceOnUse">
-                            <stop offset="0%" stop-color="#ff0000" /><stop offset="16.6%" stop-color="#ffff00" />
-                            <stop offset="33.3%" stop-color="#00ff00" /><stop offset="50%" stop-color="#00ffff" />
-                            <stop offset="66.6%" stop-color="#0000ff" /><stop offset="83.3%" stop-color="#ff00ff" />
-                            <stop offset="100%" stop-color="#ff0000" />
-                        </linearGradient>
-                        <mask id="spectrumMask">
-                            <rect width="200%" height="100%" fill="url(#spectrumGrad)">
-                                <animateTransform attributeName="transform" type="translate" from="-100%,0" to="0,0" dur="${duration}s" repeatCount="indefinite" />
-                            </rect>
-                        </mask>`;
+            } else if (type === 'text-glitch') {
+                 if (!style.textContent.includes('@keyframes textGlitch')) {
+                    style.textContent += `
+                        @keyframes textGlitch {
+                            0% { clip-path: inset(80% 0 0 0); transform: translate(-2px, 2px); }
+                            10% { clip-path: inset(10% 0 85% 0); transform: translate(2px, -2px); }
+                            20% { clip-path: inset(80% 0 0 0); transform: translate(-2px, 2px); }
+                            30% { clip-path: inset(10% 0 85% 0); transform: translate(2px, -2px); }
+                            40% { clip-path: inset(50% 0 30% 0); transform: translate(-2px, 2px); }
+                            50% { clip-path: inset(0 0 0 0); transform: translate(0, 0); }
+                            100% { clip-path: inset(0 0 0 0); transform: translate(0, 0); }
+                        }
+                    `;
                 }
-                // Create a colored overlay using feFlood + Composite so it applies to the shape
-                if (!svg.querySelector('#spectrumFilter')) {
-                    const filter = doc.createElementNS("http://www.w3.org/2000/svg", "filter");
-                    filter.setAttribute("id", "spectrumFilter");
-                    filter.innerHTML = `<feFlood flood-color="#ffffff" result="white"/><feComposite in="white" in2="SourceGraphic" operator="atop"/>`;
-                    svg.insertBefore(filter, svg.firstChild);
-                }
-                applyClassToTargets('', el => {
-                    el.setAttribute('mask', 'url(#spectrumMask)');
-                    el.setAttribute('filter', 'url(#spectrumFilter)');
-                });
+                style.textContent += `\n.anim-text-glitch { animation: textGlitch 2s steps(2, start) infinite; }\n`;
+                applyClassToTargets('anim-text-glitch');
             } else if (type === 'vortex-gradient') {
                 if (!svg.querySelector('#vortexGrad')) {
                     const defs = svg.querySelector('defs') || doc.createElementNS("http://www.w3.org/2000/svg", "defs");
@@ -6353,15 +6492,18 @@
 
         ecpStripAnimBtn.addEventListener('click', () => {
             if (selectedElements.length === 0) return;
-            selectedElements.forEach(el => {
-                el.querySelectorAll('animate, animateTransform, animateMotion, set').forEach(a => a.remove());
-                Array.from(el.classList).filter(c => c.startsWith('anim-')).forEach(c => el.classList.remove(c));
-                el.style.animation = '';
-                el.removeAttribute('filter');
-            });
-            updateEditorFromPreview();
-            populateAnimList(selectedElements[0]);
-            showToast('Animations stripped');
+            const code = editor.getValue();
+            const doc = new DOMParser().parseFromString(code, "image/svg+xml");
+            const targetsInDoc = selectedElements.map(el => doc.getElementById(el.id)).filter(Boolean);
+            const count = stripAnimations(doc, targetsInDoc, { all: true });
+            
+            if (count > 0) {
+                editor.setValue(formatXML(new XMLSerializer().serializeToString(doc)));
+                deselectElement();
+                showToast(`Stripped ${count} animations from selection`);
+            } else {
+                showToast('No animations found on selection', true);
+            }
         });
 
         // --- Motion Path Binding Logic ---
@@ -6411,69 +6553,13 @@
             stripAllAnimBtn.addEventListener('click', () => {
                 const code = editor.getValue();
                 const doc = new DOMParser().parseFromString(code, "image/svg+xml");
-                const svg = doc.querySelector('svg');
-                if (!svg) return showToast('No SVG found', true);
-
-                let removed = 0;
-
-                // 1. Remove all SMIL animation elements
-                svg.querySelectorAll('animate, animateTransform, animateMotion, set').forEach(el => {
-                    el.remove();
-                    removed++;
-                });
-
-                // 2. Remove all anim-* CSS classes from elements
-                svg.querySelectorAll('[class]').forEach(el => {
-                    const classes = Array.from(el.classList).filter(c => c.startsWith('anim-'));
-                    classes.forEach(c => { el.classList.remove(c); removed++; });
-                    el.style.animation = '';
-                });
-
-                // 3. Clean up animation-related SVG filters
-                ['#animNeonFilter', '#animGlitchFilter', '#animGooeyFilter', '#holoFilter', '#crtFilter', '#moshFilter', '#heatFilter', '#liquidFilter', '#cyberGrad', '#cyberMask', '#scanlineFilter', '#scanPattern', '#scanMask', '#pixelateFilter', '#colorCycleFilter', '#textGlitchFilter'].forEach(sel => {
-                    const el = svg.querySelector(sel);
-                    if (el) { el.remove(); removed++; }
-                });
-
-                // 4. Remove filter attributes from elements
-                svg.querySelectorAll('[filter]').forEach(el => {
-                    const f = el.getAttribute('filter');
-                    if (f && f.includes('anim') || f.includes('holo') || f.includes('crt') || f.includes('mosh') || f.includes('heat') || f.includes('liquid') || f.includes('cyber') || f.includes('goo') || f.includes('textGlitch')) {
-                        el.removeAttribute('filter');
-                        removed++;
-                    }
-                });
-
-                // 5. Clean @keyframes from <style> elements
-                svg.querySelectorAll('style').forEach(styleEl => {
-                    let css = styleEl.textContent;
-                    // Remove @keyframes blocks
-                    css = css.replace(/@keyframes[^{]+\{(?:[^{}]*|\{[^{}]*\})*\}/g, '');
-                    // Remove .anim-* selector blocks
-                    css = css.replace(/\.anim-[^{]+\{[^}]*\}/g, '');
-                    css = css.trim();
-                    if (!css) {
-                        styleEl.remove();
-                    } else {
-                        styleEl.textContent = css;
-                    }
-                    removed++;
-                });
-
-                // 6. Remove mask attributes from elements
-                svg.querySelectorAll('[mask]').forEach(el => {
-                    const m = el.getAttribute('mask');
-                    if (m && m.includes('cyber')) {
-                        el.removeAttribute('mask');
-                        removed++;
-                    }
-                });
-
-                if (removed > 0) {
-                    let newSvgString = new XMLSerializer().serializeToString(doc);
-                    editor.setValue(formatXML(newSvgString));
+                const count = stripAnimations(doc, null, { all: true });
+                
+                if (count > 0) {
+                    editor.setValue(formatXML(new XMLSerializer().serializeToString(doc)));
                     deselectElement();
-                    showToast(`Stripped ${removed} animation artifacts`);
+                    showToast(`Stripped ${count} animation artifacts`);
+                    if (typeof populateAnimList === 'function') populateAnimList(); 
                 } else {
                     showToast('No animations found to strip', true);
                 }
