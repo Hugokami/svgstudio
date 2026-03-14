@@ -6875,10 +6875,15 @@
         // Scrubbing logic
         let isScrubbing = false;
         let scrubRAF = null;
+        let cachedScrubberRect = null;
+
         function handleScrub(e) {
             if (scrubRAF) return;
             scrubRAF = requestAnimationFrame(() => {
-                const rect = tlScrubberContainer.getBoundingClientRect();
+                if (!cachedScrubberRect) {
+                    cachedScrubberRect = tlScrubberContainer.getBoundingClientRect();
+                }
+                const rect = cachedScrubberRect;
                 const clientX = e.clientX || (e.touches && e.touches[0].clientX);
                 let x = clientX - rect.left;
                 let progress = Math.max(0, Math.min(1, x / rect.width));
@@ -6897,6 +6902,7 @@
 
         tlScrubberContainer.addEventListener('mousedown', (e) => {
             isScrubbing = true;
+            cachedScrubberRect = tlScrubberContainer.getBoundingClientRect();
             handleScrub(e);
         });
 
@@ -6906,6 +6912,7 @@
 
         window.addEventListener('mouseup', () => {
             isScrubbing = false;
+            cachedScrubberRect = null;
             if (scrubRAF) {
                 cancelAnimationFrame(scrubRAF);
                 scrubRAF = null;
@@ -7095,6 +7102,7 @@
         let marqueeStart = { x: 0, y: 0 };
         let marqueeContainerRect = null;
         let panRAF = null;
+        let dragMarqueeRAF = null;
 
         let marqueeBox = document.createElement('div');
         marqueeBox.className = 'marquee-box';
@@ -7265,36 +7273,47 @@
                     updateTransform();
                     panRAF = null;
                 });
-            } else if (interactionMode === 'marquee') {
-                if (!marqueeContainerRect) return;
-                const currentX = e.clientX - marqueeContainerRect.left;
-                const currentY = e.clientY - marqueeContainerRect.top;
+            } else if (interactionMode === 'marquee' || interactionMode === 'drag') {
+                if (dragMarqueeRAF) return;
+                dragMarqueeRAF = requestAnimationFrame(() => {
+                    if (interactionMode === 'marquee') {
+                        if (marqueeContainerRect) {
+                            const currentX = e.clientX - marqueeContainerRect.left;
+                            const currentY = e.clientY - marqueeContainerRect.top;
 
-                const x = Math.min(marqueeStart.x, currentX);
-                const y = Math.min(marqueeStart.y, currentY);
-                const w = Math.abs(currentX - marqueeStart.x);
-                const h = Math.abs(currentY - marqueeStart.y);
+                            const x = Math.min(marqueeStart.x, currentX);
+                            const y = Math.min(marqueeStart.y, currentY);
+                            const w = Math.abs(currentX - marqueeStart.x);
+                            const h = Math.abs(currentY - marqueeStart.y);
 
-                marqueeBox.style.left = x + 'px';
-                marqueeBox.style.top = y + 'px';
-                marqueeBox.style.width = w + 'px';
-                marqueeBox.style.height = h + 'px';
-            } else if (interactionMode === 'drag') {
-                const dx = (e.clientX - ptrStartX) / scale;
-                const dy = (e.clientY - ptrStartY) / scale;
-                
-                selectedElements.forEach(el => {
-                    const startPos = dragOffsets.get(el);
-                    if (startPos) {
-                        const newX = startPos.tx + dx;
-                        const newY = startPos.ty + dy;
-                        el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
+                            marqueeBox.style.left = x + 'px';
+                            marqueeBox.style.top = y + 'px';
+                            marqueeBox.style.width = w + 'px';
+                            marqueeBox.style.height = h + 'px';
+                        }
+                    } else if (interactionMode === 'drag') {
+                        const dx = (e.clientX - ptrStartX) / scale;
+                        const dy = (e.clientY - ptrStartY) / scale;
+
+                        selectedElements.forEach(el => {
+                            const startPos = dragOffsets.get(el);
+                            if (startPos) {
+                                const newX = startPos.tx + dx;
+                                const newY = startPos.ty + dy;
+                                el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
+                            }
+                        });
                     }
+                    dragMarqueeRAF = null;
                 });
             }
         });
 
         window.addEventListener('pointerup', (e) => {
+            if (dragMarqueeRAF) {
+                cancelAnimationFrame(dragMarqueeRAF);
+                dragMarqueeRAF = null;
+            }
             if (interactionMode === 'none') {
                 const isCanvasBackground = e.target === svgPreviewContainer || e.target === svgTransformWrapper || e.target === svgTransformWrapper.querySelector('svg');
                 if (isCanvasBackground && !e.shiftKey && !ptrMoved) deselectElement();
