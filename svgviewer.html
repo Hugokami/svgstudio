@@ -3337,13 +3337,28 @@
 
         // Resizer Logic
         let isResizing = false;
+        let resizerRAF = null;
         resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            let newWidth = (e.clientX / document.body.clientWidth) * 100;
-            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            if (resizerRAF) return;
+            resizerRAF = requestAnimationFrame(() => {
+                let newWidth = (e.clientX / document.body.clientWidth) * 100;
+                editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+                resizerRAF = null;
+            });
         });
-        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; } });
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = 'default';
+                if (resizerRAF) {
+                    cancelAnimationFrame(resizerRAF);
+                    resizerRAF = null;
+                }
+            }
+        });
 
         // Zoom & Pan
         function updateTransform() {
@@ -6875,10 +6890,11 @@
         // Scrubbing logic
         let isScrubbing = false;
         let scrubRAF = null;
+        let cachedScrubRect = null;
         function handleScrub(e) {
             if (scrubRAF) return;
             scrubRAF = requestAnimationFrame(() => {
-                const rect = tlScrubberContainer.getBoundingClientRect();
+                const rect = cachedScrubRect || tlScrubberContainer.getBoundingClientRect();
                 const clientX = e.clientX || (e.touches && e.touches[0].clientX);
                 let x = clientX - rect.left;
                 let progress = Math.max(0, Math.min(1, x / rect.width));
@@ -6897,6 +6913,7 @@
 
         tlScrubberContainer.addEventListener('mousedown', (e) => {
             isScrubbing = true;
+            cachedScrubRect = tlScrubberContainer.getBoundingClientRect();
             handleScrub(e);
         });
 
@@ -6906,6 +6923,7 @@
 
         window.addEventListener('mouseup', () => {
             isScrubbing = false;
+            cachedScrubRect = null;
             if (scrubRAF) {
                 cancelAnimationFrame(scrubRAF);
                 scrubRAF = null;
@@ -7094,7 +7112,7 @@
         let dragOffsets = new Map();
         let marqueeStart = { x: 0, y: 0 };
         let marqueeContainerRect = null;
-        let panRAF = null;
+        let pointerRAF = null;
 
         let marqueeBox = document.createElement('div');
         marqueeBox.className = 'marquee-box';
@@ -7257,41 +7275,43 @@
                 ptrMoved = true;
             }
 
-            if (interactionMode === 'pan') {
-                if (panRAF) return;
-                panRAF = requestAnimationFrame(() => {
+            if (pointerRAF) return;
+
+            pointerRAF = requestAnimationFrame(() => {
+                if (interactionMode === 'pan') {
                     panX = e.clientX - startX;
                     panY = e.clientY - startY;
                     updateTransform();
-                    panRAF = null;
-                });
-            } else if (interactionMode === 'marquee') {
-                if (!marqueeContainerRect) return;
-                const currentX = e.clientX - marqueeContainerRect.left;
-                const currentY = e.clientY - marqueeContainerRect.top;
+                } else if (interactionMode === 'marquee') {
+                    if (marqueeContainerRect) {
+                        const currentX = e.clientX - marqueeContainerRect.left;
+                        const currentY = e.clientY - marqueeContainerRect.top;
 
-                const x = Math.min(marqueeStart.x, currentX);
-                const y = Math.min(marqueeStart.y, currentY);
-                const w = Math.abs(currentX - marqueeStart.x);
-                const h = Math.abs(currentY - marqueeStart.y);
+                        const x = Math.min(marqueeStart.x, currentX);
+                        const y = Math.min(marqueeStart.y, currentY);
+                        const w = Math.abs(currentX - marqueeStart.x);
+                        const h = Math.abs(currentY - marqueeStart.y);
 
-                marqueeBox.style.left = x + 'px';
-                marqueeBox.style.top = y + 'px';
-                marqueeBox.style.width = w + 'px';
-                marqueeBox.style.height = h + 'px';
-            } else if (interactionMode === 'drag') {
-                const dx = (e.clientX - ptrStartX) / scale;
-                const dy = (e.clientY - ptrStartY) / scale;
-                
-                selectedElements.forEach(el => {
-                    const startPos = dragOffsets.get(el);
-                    if (startPos) {
-                        const newX = startPos.tx + dx;
-                        const newY = startPos.ty + dy;
-                        el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
+                        marqueeBox.style.left = x + 'px';
+                        marqueeBox.style.top = y + 'px';
+                        marqueeBox.style.width = w + 'px';
+                        marqueeBox.style.height = h + 'px';
                     }
-                });
-            }
+                } else if (interactionMode === 'drag') {
+                    const dx = (e.clientX - ptrStartX) / scale;
+                    const dy = (e.clientY - ptrStartY) / scale;
+
+                    selectedElements.forEach(el => {
+                        const startPos = dragOffsets.get(el);
+                        if (startPos) {
+                            const newX = startPos.tx + dx;
+                            const newY = startPos.ty + dy;
+                            el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
+                        }
+                    });
+                }
+                pointerRAF = null;
+            });
         });
 
         window.addEventListener('pointerup', (e) => {
