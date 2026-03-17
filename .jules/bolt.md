@@ -1,3 +1,7 @@
 ## 2024-05-24 - Unthrottled DOM reads during drag operations
 **Learning:** `svgviewer.html` is a large single-file application where layout thrashing is a primary performance bottleneck. Several drag operations (marquee selection, panning, scrubbing) were recalculating layout (e.g., `getBoundingClientRect`) or modifying DOM state inline during `mousemove` events without `requestAnimationFrame` throttling, causing unnecessary layout calculation on every frame.
 **Action:** When working with custom drag/drop or mousemove-driven interactions in this specific file, always implement `requestAnimationFrame` and ensure bounding rects are cached on `mousedown` rather than calculated on `mousemove`.
+
+## 2024-05-24 - [Optimize DOM Reads/Writes during Pointer Events]
+**Learning:** In high-frequency event handlers like `pointermove` (for dragging or marquee selection), directly updating DOM styles based on pointer coordinates causes severe layout thrashing. Wrapping DOM updates in `requestAnimationFrame` significantly improves performance. However, capturing the *first* event in a frame (e.g., `if (raf) return;`) introduces slight input lag, and cancelling the frame on `pointerup` drops the final sub-pixel movement.
+**Action:** Next time, use external variables to store the latest pointer coordinates, let `pointermove` only update these variables and schedule a single rAF. The rAF callback should read the latest coordinates and apply them. On `pointerup`, force a final synchronous update for pixel-perfect precision.
