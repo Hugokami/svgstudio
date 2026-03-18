@@ -3337,13 +3337,37 @@
 
         // Resizer Logic
         let isResizing = false;
-        resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
+        let cachedBodyWidth = 0;
+        let resizerRAF = null;
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            // ⚡ Bolt Optimization: Cache clientWidth on mousedown to avoid layout thrashing during mousemove
+            cachedBodyWidth = document.body.clientWidth;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            let newWidth = (e.clientX / document.body.clientWidth) * 100;
-            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            if (resizerRAF) return;
+            // ⚡ Bolt Optimization: Throttle DOM updates with requestAnimationFrame to ensure smooth 60fps resizing
+            resizerRAF = requestAnimationFrame(() => {
+                let newWidth = (e.clientX / cachedBodyWidth) * 100;
+                editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+                resizerRAF = null;
+            });
         });
-        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; } });
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = 'default';
+                if (resizerRAF) {
+                    cancelAnimationFrame(resizerRAF);
+                    resizerRAF = null;
+                }
+            }
+        });
 
         // Zoom & Pan
         function updateTransform() {
@@ -6875,13 +6899,16 @@
         // Scrubbing logic
         let isScrubbing = false;
         let scrubRAF = null;
+        let cachedScrubRect = null;
         function handleScrub(e) {
             if (scrubRAF) return;
+            // ⚡ Bolt Optimization: Throttle timeline scrubbing DOM read/writes inside rAF to prevent layout thrashing
             scrubRAF = requestAnimationFrame(() => {
-                const rect = tlScrubberContainer.getBoundingClientRect();
+                // ⚡ Bolt Optimization: Cache bounding rect on mousedown to avoid recalculation every frame
+                if (!cachedScrubRect) cachedScrubRect = tlScrubberContainer.getBoundingClientRect();
                 const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-                let x = clientX - rect.left;
-                let progress = Math.max(0, Math.min(1, x / rect.width));
+                let x = clientX - cachedScrubRect.left;
+                let progress = Math.max(0, Math.min(1, x / cachedScrubRect.width));
 
                 masterTimeline.progress(progress).pause();
 
@@ -6897,6 +6924,7 @@
 
         tlScrubberContainer.addEventListener('mousedown', (e) => {
             isScrubbing = true;
+            cachedScrubRect = tlScrubberContainer.getBoundingClientRect();
             handleScrub(e);
         });
 
@@ -7095,6 +7123,8 @@
         let marqueeStart = { x: 0, y: 0 };
         let marqueeContainerRect = null;
         let panRAF = null;
+        let interactionRAF = null;
+        let latestPtrX = 0, latestPtrY = 0;
 
         let marqueeBox = document.createElement('div');
         marqueeBox.className = 'marquee-box';
@@ -7266,35 +7296,67 @@
                     panRAF = null;
                 });
             } else if (interactionMode === 'marquee') {
-                if (!marqueeContainerRect) return;
-                const currentX = e.clientX - marqueeContainerRect.left;
-                const currentY = e.clientY - marqueeContainerRect.top;
+                latestPtrX = e.clientX;
+                latestPtrY = e.clientY;
+                if (interactionRAF) return;
+                // ⚡ Bolt Optimization: Throttle marquee box updates via rAF and cache target coordinates
+                interactionRAF = requestAnimationFrame(() => {
+                    if (!marqueeContainerRect) return;
+                    const currentX = latestPtrX - marqueeContainerRect.left;
+                    const currentY = latestPtrY - marqueeContainerRect.top;
 
-                const x = Math.min(marqueeStart.x, currentX);
-                const y = Math.min(marqueeStart.y, currentY);
-                const w = Math.abs(currentX - marqueeStart.x);
-                const h = Math.abs(currentY - marqueeStart.y);
+                    const x = Math.min(marqueeStart.x, currentX);
+                    const y = Math.min(marqueeStart.y, currentY);
+                    const w = Math.abs(currentX - marqueeStart.x);
+                    const h = Math.abs(currentY - marqueeStart.y);
 
-                marqueeBox.style.left = x + 'px';
-                marqueeBox.style.top = y + 'px';
-                marqueeBox.style.width = w + 'px';
-                marqueeBox.style.height = h + 'px';
+                    marqueeBox.style.left = x + 'px';
+                    marqueeBox.style.top = y + 'px';
+                    marqueeBox.style.width = w + 'px';
+                    marqueeBox.style.height = h + 'px';
+                    interactionRAF = null;
+                });
             } else if (interactionMode === 'drag') {
-                const dx = (e.clientX - ptrStartX) / scale;
-                const dy = (e.clientY - ptrStartY) / scale;
-                
-                selectedElements.forEach(el => {
-                    const startPos = dragOffsets.get(el);
-                    if (startPos) {
-                        const newX = startPos.tx + dx;
-                        const newY = startPos.ty + dy;
-                        el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
-                    }
+                latestPtrX = e.clientX;
+                latestPtrY = e.clientY;
+                if (interactionRAF) return;
+                // ⚡ Bolt Optimization: Throttle high-frequency SVG element attribute updates during pointer drag
+                interactionRAF = requestAnimationFrame(() => {
+                    const dx = (latestPtrX - ptrStartX) / scale;
+                    const dy = (latestPtrY - ptrStartY) / scale;
+
+                    selectedElements.forEach(el => {
+                        const startPos = dragOffsets.get(el);
+                        if (startPos) {
+                            const newX = startPos.tx + dx;
+                            const newY = startPos.ty + dy;
+                            el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
+                        }
+                    });
+                    interactionRAF = null;
                 });
             }
         });
 
         window.addEventListener('pointerup', (e) => {
+            if (interactionRAF) {
+                cancelAnimationFrame(interactionRAF);
+                interactionRAF = null;
+                // ⚡ Bolt Optimization: Force synchronous final update to ensure UI matches exact drop coords before state updates
+                if (interactionMode === 'drag') {
+                    const dx = (e.clientX - ptrStartX) / scale;
+                    const dy = (e.clientY - ptrStartY) / scale;
+                    selectedElements.forEach(el => {
+                        const startPos = dragOffsets.get(el);
+                        if (startPos) {
+                            const newX = startPos.tx + dx;
+                            const newY = startPos.ty + dy;
+                            el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
+                        }
+                    });
+                }
+            }
+
             if (interactionMode === 'none') {
                 const isCanvasBackground = e.target === svgPreviewContainer || e.target === svgTransformWrapper || e.target === svgTransformWrapper.querySelector('svg');
                 if (isCanvasBackground && !e.shiftKey && !ptrMoved) deselectElement();

@@ -1312,13 +1312,37 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
 
         // Resizer Logic
         let isResizing = false;
-        resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
+        let cachedBodyWidth = 0;
+        let resizerRAF = null;
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            // ⚡ Bolt Optimization: Cache clientWidth on mousedown to avoid layout thrashing during mousemove
+            cachedBodyWidth = document.body.clientWidth;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            let newWidth = (e.clientX / document.body.clientWidth) * 100;
-            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            if (resizerRAF) return;
+            // ⚡ Bolt Optimization: Throttle DOM updates with requestAnimationFrame to ensure smooth 60fps resizing
+            resizerRAF = requestAnimationFrame(() => {
+                let newWidth = (e.clientX / cachedBodyWidth) * 100;
+                editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+                resizerRAF = null;
+            });
         });
-        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; } });
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = 'default';
+                if (resizerRAF) {
+                    cancelAnimationFrame(resizerRAF);
+                    resizerRAF = null;
+                }
+            }
+        });
 
         // Zoom & Pan
         function updateTransform() {
@@ -5046,13 +5070,16 @@ ecpStrokeWidth.addEventListener('change', () => {
         // Scrubbing logic
         let isScrubbing = false;
         let scrubRAF = null;
+        let cachedScrubRect = null;
         function handleScrub(e) {
             if (scrubRAF) return;
+            // ⚡ Bolt Optimization: Throttle timeline scrubbing DOM read/writes inside rAF to prevent layout thrashing
             scrubRAF = requestAnimationFrame(() => {
-                const rect = tlScrubberContainer.getBoundingClientRect();
+                // ⚡ Bolt Optimization: Cache bounding rect on mousedown to avoid recalculation every frame
+                if (!cachedScrubRect) cachedScrubRect = tlScrubberContainer.getBoundingClientRect();
                 const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-                let x = clientX - rect.left;
-                let progress = Math.max(0, Math.min(1, x / rect.width));
+                let x = clientX - cachedScrubRect.left;
+                let progress = Math.max(0, Math.min(1, x / cachedScrubRect.width));
 
                 masterTimeline.progress(progress).pause();
 
@@ -5068,6 +5095,7 @@ ecpStrokeWidth.addEventListener('change', () => {
 
         tlScrubberContainer.addEventListener('mousedown', (e) => {
             isScrubbing = true;
+            cachedScrubRect = tlScrubberContainer.getBoundingClientRect();
             handleScrub(e);
         });
 
