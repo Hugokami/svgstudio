@@ -1312,13 +1312,19 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
 
         // Resizer Logic
         let isResizing = false;
+        let resizeRAF = null;
         resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            let newWidth = (e.clientX / document.body.clientWidth) * 100;
-            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            // ⚡ Bolt Optimization: Throttle resize event with requestAnimationFrame to prevent layout thrashing
+            if (resizeRAF) return;
+            resizeRAF = requestAnimationFrame(() => {
+                let newWidth = (e.clientX / document.body.clientWidth) * 100;
+                editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+                resizeRAF = null;
+            });
         });
-        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; } });
+        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; if (resizeRAF) { cancelAnimationFrame(resizeRAF); resizeRAF = null; } } });
 
         // Zoom & Pan
         function updateTransform() {
@@ -5296,20 +5302,27 @@ ecpStrokeWidth.addEventListener('change', () => {
             }
         });
 
+        let marqueeRAF = null;
         svgPreviewContainer.addEventListener('mousemove', (e) => {
             if (!isMarquee || !marqueeContainerRect) return;
-            const currentX = e.clientX - marqueeContainerRect.left;
-            const currentY = e.clientY - marqueeContainerRect.top;
 
-            const x = Math.min(marqueeStart.x, currentX);
-            const y = Math.min(marqueeStart.y, currentY);
-            const w = Math.abs(currentX - marqueeStart.x);
-            const h = Math.abs(currentY - marqueeStart.y);
+            // ⚡ Bolt Optimization: Throttle marquee dragging with requestAnimationFrame
+            if (marqueeRAF) return;
+            marqueeRAF = requestAnimationFrame(() => {
+                const currentX = e.clientX - marqueeContainerRect.left;
+                const currentY = e.clientY - marqueeContainerRect.top;
 
-            marqueeBox.style.left = x + 'px';
-            marqueeBox.style.top = y + 'px';
-            marqueeBox.style.width = w + 'px';
-            marqueeBox.style.height = h + 'px';
+                const x = Math.min(marqueeStart.x, currentX);
+                const y = Math.min(marqueeStart.y, currentY);
+                const w = Math.abs(currentX - marqueeStart.x);
+                const h = Math.abs(currentY - marqueeStart.y);
+
+                marqueeBox.style.left = x + 'px';
+                marqueeBox.style.top = y + 'px';
+                marqueeBox.style.width = w + 'px';
+                marqueeBox.style.height = h + 'px';
+                marqueeRAF = null;
+            });
         });
 
         window.addEventListener('mouseup', (e) => {
@@ -5317,6 +5330,10 @@ ecpStrokeWidth.addEventListener('change', () => {
             isMarquee = false;
             marqueeContainerRect = null;
             marqueeBox.style.display = 'none';
+            if (marqueeRAF) {
+                cancelAnimationFrame(marqueeRAF);
+                marqueeRAF = null;
+            }
 
             const mRect = marqueeBox.getBoundingClientRect();
             // If the box is basically a click, do nothing
