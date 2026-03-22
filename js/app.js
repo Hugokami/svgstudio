@@ -1310,15 +1310,38 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
             }
         });
 
+        // ⚡ Bolt Optimization: Cache document.body.clientWidth on mousedown and use requestAnimationFrame to prevent layout thrashing during panel resize.
         // Resizer Logic
         let isResizing = false;
-        resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
+        let resizerClientWidth = 0;
+        let resizerRAF = null;
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            resizerClientWidth = document.body.clientWidth; // Cache layout read
+            e.preventDefault();
+        });
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            let newWidth = (e.clientX / document.body.clientWidth) * 100;
-            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            if (resizerRAF) return;
+            resizerRAF = requestAnimationFrame(() => {
+                let newWidth = (e.clientX / resizerClientWidth) * 100;
+                editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+                resizerRAF = null;
+            });
         });
-        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; } });
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = 'default';
+                if (resizerRAF) {
+                    cancelAnimationFrame(resizerRAF);
+                    resizerRAF = null;
+                }
+            }
+        });
 
         // Zoom & Pan
         function updateTransform() {
