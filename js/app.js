@@ -1312,13 +1312,19 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
 
         // Resizer Logic
         let isResizing = false;
+        let resizerRAF = null;
         resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
+        // ⚡ Bolt Optimization: Throttled resizer layout reads/writes to RAF to prevent layout thrashing and high frame computation times.
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            let newWidth = (e.clientX / document.body.clientWidth) * 100;
-            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            if (resizerRAF) return;
+            resizerRAF = requestAnimationFrame(() => {
+                let newWidth = (e.clientX / document.body.clientWidth) * 100;
+                editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+                resizerRAF = null;
+            });
         });
-        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; } });
+        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; if(resizerRAF) { cancelAnimationFrame(resizerRAF); resizerRAF = null; } } });
 
         // Zoom & Pan
         function updateTransform() {
@@ -5296,20 +5302,28 @@ ecpStrokeWidth.addEventListener('change', () => {
             }
         });
 
+        let marqueeRAF = null;
+        // ⚡ Bolt Optimization: Throttled marquee layout reads/writes to RAF to prevent layout thrashing and high frame computation times.
         svgPreviewContainer.addEventListener('mousemove', (e) => {
             if (!isMarquee || !marqueeContainerRect) return;
-            const currentX = e.clientX - marqueeContainerRect.left;
-            const currentY = e.clientY - marqueeContainerRect.top;
+            if (marqueeRAF) return;
+            marqueeRAF = requestAnimationFrame(() => {
+                if (marqueeContainerRect) {
+                    const currentX = e.clientX - marqueeContainerRect.left;
+                    const currentY = e.clientY - marqueeContainerRect.top;
 
-            const x = Math.min(marqueeStart.x, currentX);
-            const y = Math.min(marqueeStart.y, currentY);
-            const w = Math.abs(currentX - marqueeStart.x);
-            const h = Math.abs(currentY - marqueeStart.y);
+                    const x = Math.min(marqueeStart.x, currentX);
+                    const y = Math.min(marqueeStart.y, currentY);
+                    const w = Math.abs(currentX - marqueeStart.x);
+                    const h = Math.abs(currentY - marqueeStart.y);
 
-            marqueeBox.style.left = x + 'px';
-            marqueeBox.style.top = y + 'px';
-            marqueeBox.style.width = w + 'px';
-            marqueeBox.style.height = h + 'px';
+                    marqueeBox.style.left = x + 'px';
+                    marqueeBox.style.top = y + 'px';
+                    marqueeBox.style.width = w + 'px';
+                    marqueeBox.style.height = h + 'px';
+                }
+                marqueeRAF = null;
+            });
         });
 
         window.addEventListener('mouseup', (e) => {
