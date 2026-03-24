@@ -3579,6 +3579,11 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
 
         let selectedElements = [];
         const selectableTagNames = new Set(['path', 'circle', 'rect', 'polygon', 'polyline', 'ellipse', 'line', 'text', 'textpath', 'tspan', 'g', 'use', 'image', 'clipPath']);
+        // ⚡ Bolt Optimization: Pre-calculate the selector string to avoid string allocation on every marquee check and handle SVG case-sensitivity.
+        const selectableSelector = Array.from(selectableTagNames)
+            .filter(tag => tag.toLowerCase() !== 'g' && tag.toLowerCase() !== 'use' && tag.toLowerCase() !== 'clippath')
+            .map(tag => tag.toLowerCase() === 'textpath' ? 'textPath' : tag)
+            .join(', ');
 
         function deselectElement() {
             selectedElements.forEach(el => el.classList.remove('el-selected'));
@@ -5327,11 +5332,12 @@ ecpStrokeWidth.addEventListener('change', () => {
 
             // Find all elements inside the marquee
             const newSelections = [];
-            const walker = document.createTreeWalker(svgRoot, NodeFilter.SHOW_ELEMENT, null, false);
-            let node;
-            while (node = walker.nextNode()) {
-                const tag = node.tagName.toLowerCase();
-                if (selectableTagNames.has(tag) && tag !== 'g' && tag !== 'use' && tag !== 'clipPath') {
+
+            // ⚡ Bolt Optimization: Use pre-calculated query string to reduce layout thrashing overhead, checking if the string is empty
+            if (selectableSelector) {
+                const nodes = svgRoot.querySelectorAll(selectableSelector);
+                for (let i = 0; i < nodes.length; i++) {
+                    const node = nodes[i];
                     // Quick check if element bounds intersect marquee
                     const elRect = node.getBoundingClientRect();
                     if (
