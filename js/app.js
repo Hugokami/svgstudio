@@ -4908,6 +4908,9 @@ ecpStrokeWidth.addEventListener('change', () => {
         // ═══ VISUAL TIMELINE LOGIC ═══
         let timelineDuration = 5; // Default 5s scene
 
+        // ⚡ Bolt Optimization: Cache compiled dynamic math expressions to prevent JIT recompilation on every frame
+        const exprCache = new Map();
+
         function updateTimelineUI() {
             const progress = masterTimeline.progress();
             tlProgress.style.width = (progress * 100) + '%';
@@ -4950,9 +4953,12 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const expr = attr.value;
                             try {
                                 // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                let func = exprCache.get(expr);
+                                if (!func) {
+                                    func = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    exprCache.set(expr, func);
+                                }
+                                const val = func(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
@@ -5014,9 +5020,12 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const expr = attr.value;
                             try {
                                 // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                let func = exprCache.get(expr);
+                                if (!func) {
+                                    func = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    exprCache.set(expr, func);
+                                }
+                                const val = func(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions

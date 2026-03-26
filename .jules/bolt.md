@@ -1,3 +1,7 @@
 ## 2024-05-24 - Unthrottled DOM reads during drag operations
 **Learning:** `svgviewer.html` is a large single-file application where layout thrashing is a primary performance bottleneck. Several drag operations (marquee selection, panning, scrubbing) were recalculating layout (e.g., `getBoundingClientRect`) or modifying DOM state inline during `mousemove` events without `requestAnimationFrame` throttling, causing unnecessary layout calculation on every frame.
 **Action:** When working with custom drag/drop or mousemove-driven interactions in this specific file, always implement `requestAnimationFrame` and ensure bounding rects are cached on `mousedown` rather than calculated on `mousemove`.
+
+## 2024-05-25 - Dynamic Function compilation bottleneck in animation loops
+**Learning:** `new Function()` in JavaScript triggers a slow runtime JIT compilation. This app evaluates math expressions on SVG attributes dynamically up to 60 times a second using `new Function()`. Calling `new Function()` inside a high-frequency event loop like `gsap.ticker` or `requestAnimationFrame` causes a severe performance hit (~100x slower than a cached function call).
+**Action:** Always wrap dynamic runtime code evaluations like `new Function()` or `eval()` with a caching mechanism (like a `Map` where the expression is the key and the compiled function is the value), so compilation only happens once per unique expression.
