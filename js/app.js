@@ -4949,10 +4949,16 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Cache compiled expression functions to prevent severe JIT compilation overhead during GSAP tickers
+                                if (typeof window._exprCache === 'undefined') {
+                                    window._exprCache = new Map();
+                                }
+                                let fn = window._exprCache.get(expr);
+                                if (!fn) {
+                                    fn = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    window._exprCache.set(expr, fn);
+                                }
+                                const val = fn(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
@@ -5013,10 +5019,16 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Cache compiled expression functions to prevent severe JIT compilation overhead during GSAP tickers
+                                if (typeof window._exprCache === 'undefined') {
+                                    window._exprCache = new Map();
+                                }
+                                let fn = window._exprCache.get(expr);
+                                if (!fn) {
+                                    fn = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    window._exprCache.set(expr, fn);
+                                }
+                                const val = fn(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
