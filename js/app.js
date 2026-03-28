@@ -149,6 +149,8 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
         let isPanning = false;
 
         // Timeline State
+        // ⚡ Bolt Optimization: Cache parsed Math expressions to avoid excessive new Function() calls per frame
+        var exprFunctionCache = new Map();
         let isTimelineOpen = false;
         let masterTimeline = gsap.timeline({
             paused: false,
@@ -4310,7 +4312,8 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
             // Validate expression roughly
             try {
                 // Dummy evaluate
-                new Function('t', 'Math', `with(Math) { return ${expr}; }`)(0, Math);
+                // ⚡ Bolt Optimization: Use the same signature as evaluation to avoid confusion and properly validate
+                new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(0, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
             } catch (e) {
                 showToast('Invalid Expression!', true);
                 return;
@@ -4949,10 +4952,13 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Cache parsed Math expressions to avoid excessive new Function() calls per frame
+                                let fn = exprFunctionCache.get(expr);
+                                if (!fn) {
+                                    fn = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    exprFunctionCache.set(expr, fn);
+                                }
+                                const val = fn(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
@@ -5013,10 +5019,13 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Cache parsed Math expressions to avoid excessive new Function() calls per frame
+                                let fn = exprFunctionCache.get(expr);
+                                if (!fn) {
+                                    fn = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    exprFunctionCache.set(expr, fn);
+                                }
+                                const val = fn(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
