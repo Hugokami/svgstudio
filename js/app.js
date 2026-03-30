@@ -135,6 +135,7 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
         const tlTime = document.getElementById('tlTime');
 
         // State
+        const compiledExprCache = new Map();
         let debounceTimer;
         let isCheckerboard = true;
         let isLineWrapped = false;
@@ -4310,7 +4311,13 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
             // Validate expression roughly
             try {
                 // Dummy evaluate
-                new Function('t', 'Math', `with(Math) { return ${expr}; }`)(0, Math);
+                // ⚡ Bolt Optimization: Use cached dummy evaluation
+                let dummyFn = compiledExprCache.get('dummy_' + expr);
+                if (!dummyFn) {
+                    dummyFn = new Function('t', 'Math', `with(Math) { return ${expr}; }`);
+                    compiledExprCache.set('dummy_' + expr, dummyFn);
+                }
+                dummyFn(0, Math);
             } catch (e) {
                 showToast('Invalid Expression!', true);
                 return;
@@ -4950,9 +4957,13 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const expr = attr.value;
                             try {
                                 // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Cache compiled math expressions
+                                let compiledFn = compiledExprCache.get(expr);
+                                if (!compiledFn) {
+                                    compiledFn = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    compiledExprCache.set(expr, compiledFn);
+                                }
+                                const val = compiledFn(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
@@ -5014,9 +5025,13 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const expr = attr.value;
                             try {
                                 // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Cache compiled math expressions
+                                let compiledFn = compiledExprCache.get(expr);
+                                if (!compiledFn) {
+                                    compiledFn = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    compiledExprCache.set(expr, compiledFn);
+                                }
+                                const val = compiledFn(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
