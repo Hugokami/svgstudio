@@ -46,7 +46,9 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
         const animateDropdown = document.getElementById('animateDropdown');
 
         // View Control Elements
-        const svgTransformWrapper = document.getElementById('svgTransformWrapper');
+        // ⚡ Bolt Optimization: Cache compiled dynamic math expressions to avoid JIT compilation overhead in high-frequency event loops.
+const expressionCache = new Map();
+const svgTransformWrapper = document.getElementById('svgTransformWrapper');
         const exportPngBtn = document.getElementById('exportPngBtn');
         const recordBtn = document.getElementById('recordBtn');
         const viewFreeBtn = document.getElementById('viewFreeBtn');
@@ -4950,9 +4952,12 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const expr = attr.value;
                             try {
                                 // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                let compiledFunc = expressionCache.get(expr);
+                                if (!compiledFunc) {
+                                    compiledFunc = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    expressionCache.set(expr, compiledFunc);
+                                }
+                                const val = compiledFunc(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
@@ -5014,9 +5019,12 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const expr = attr.value;
                             try {
                                 // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                let compiledFunc = expressionCache.get(expr);
+                                if (!compiledFunc) {
+                                    compiledFunc = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    expressionCache.set(expr, compiledFunc);
+                                }
+                                const val = compiledFunc(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
