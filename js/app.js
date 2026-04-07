@@ -4949,8 +4949,12 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
+                                // ⚡ Bolt Optimization: Cache math expressions to avoid JIT compilation overhead on every animation frame
+                                window.expressionCache = window.expressionCache || new Map();
+                                if (!window.expressionCache.has(expr)) {
+                                    window.expressionCache.set(expr, new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`));
+                                }
+                                const val = window.expressionCache.get(expr)(
                                     t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
                                 );
                                 updates[prop] = val;
@@ -5013,8 +5017,12 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
+                                // ⚡ Bolt Optimization: Cache math expressions to avoid JIT compilation overhead on every animation frame
+                                window.expressionCache = window.expressionCache || new Map();
+                                if (!window.expressionCache.has(expr)) {
+                                    window.expressionCache.set(expr, new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`));
+                                }
+                                const val = window.expressionCache.get(expr)(
                                     t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
                                 );
                                 updates[prop] = val;
