@@ -142,6 +142,9 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
         let isAiThinking = false;
         let svgHistory = JSON.parse(localStorage.getItem('svgHistory')) || [];
 
+        // ⚡ Bolt Optimization: Cache for dynamic math expressions
+        window.expressionCache = window.expressionCache || new Map();
+
         // View State
         let scale = 1;
         let panX = 0;
@@ -4944,21 +4947,27 @@ ecpStrokeWidth.addEventListener('change', () => {
 
                 exprElements.forEach(el => {
                     const updates = {};
-                    Array.from(el.attributes).forEach(attr => {
+                    // ⚡ Bolt Optimization: Use fast regular loop over attributes
+                    const attrs = el.attributes;
+                    for (let i = 0, len = attrs.length; i < len; i++) {
+                        const attr = attrs[i];
                         if (attr.name.startsWith('data-expr-')) {
-                            const prop = attr.name.replace('data-expr-', '');
+                            const prop = attr.name.substring(10); // 'data-expr-'.length === 10
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Check expressionCache to avoid expensive JIT recompilation
+                                let fn = window.expressionCache.get(expr);
+                                if (!fn) {
+                                    fn = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    window.expressionCache.set(expr, fn);
+                                }
+                                const val = fn(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
                             }
                         }
-                    });
+                    }
 
                     if (Object.keys(updates).length > 0) {
                         // Use GSAP to apply the updates since it handles SVG transform origins well
@@ -5008,21 +5017,27 @@ ecpStrokeWidth.addEventListener('change', () => {
 
                 exprElements.forEach(el => {
                     const updates = {};
-                    Array.from(el.attributes).forEach(attr => {
+                    // ⚡ Bolt Optimization: Use fast regular loop over attributes
+                    const attrs = el.attributes;
+                    for (let i = 0, len = attrs.length; i < len; i++) {
+                        const attr = attrs[i];
                         if (attr.name.startsWith('data-expr-')) {
-                            const prop = attr.name.replace('data-expr-', '');
+                            const prop = attr.name.substring(10); // 'data-expr-'.length === 10
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Check expressionCache to avoid expensive JIT recompilation
+                                let fn = window.expressionCache.get(expr);
+                                if (!fn) {
+                                    fn = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    window.expressionCache.set(expr, fn);
+                                }
+                                const val = fn(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
                             }
                         }
-                    });
+                    }
 
                     if (Object.keys(updates).length > 0) {
                         // Use GSAP to apply the updates since it handles SVG transform origins well
