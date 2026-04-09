@@ -1312,13 +1312,41 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
 
         // Resizer Logic
         let isResizing = false;
-        resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
+        // ⚡ Bolt Optimization: Cache body width on mousedown to prevent layout reads (clientWidth) on every mousemove frame.
+        let cachedBodyWidth = 0;
+        let resizeRAF = null;
+        let latestResizeX = 0;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            cachedBodyWidth = document.body.clientWidth;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            let newWidth = (e.clientX / document.body.clientWidth) * 100;
-            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            latestResizeX = e.clientX;
+            if (resizeRAF) return;
+            resizeRAF = requestAnimationFrame(() => {
+                let newWidth = (latestResizeX / cachedBodyWidth) * 100;
+                editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+                resizeRAF = null;
+            });
         });
-        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; } });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                if (resizeRAF) {
+                    cancelAnimationFrame(resizeRAF);
+                    resizeRAF = null;
+                }
+                resizer.classList.remove('active');
+                document.body.style.cursor = 'default';
+            }
+        });
 
         // Zoom & Pan
         function updateTransform() {
@@ -4949,10 +4977,13 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Use expression cache instead of creating new Function in animation loop
+                                window.expressionCache = window.expressionCache || new Map();
+                                if (!window.expressionCache.has(expr)) {
+                                    window.expressionCache.set(expr, new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`));
+                                }
+                                const fn = window.expressionCache.get(expr);
+                                const val = fn(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
@@ -5046,13 +5077,18 @@ ecpStrokeWidth.addEventListener('change', () => {
         // Scrubbing logic
         let isScrubbing = false;
         let scrubRAF = null;
+        // ⚡ Bolt Optimization: Cache scrubber rect on mousedown to prevent layout reads on every scrub frame
+        let scrubberRect = null;
+        let latestScrubX = 0;
+
         function handleScrub(e) {
+            if (!scrubberRect) return;
+            latestScrubX = e.clientX || (e.touches && e.touches[0].clientX);
             if (scrubRAF) return;
+
             scrubRAF = requestAnimationFrame(() => {
-                const rect = tlScrubberContainer.getBoundingClientRect();
-                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-                let x = clientX - rect.left;
-                let progress = Math.max(0, Math.min(1, x / rect.width));
+                let x = latestScrubX - scrubberRect.left;
+                let progress = Math.max(0, Math.min(1, x / scrubberRect.width));
 
                 masterTimeline.progress(progress).pause();
 
@@ -5068,6 +5104,7 @@ ecpStrokeWidth.addEventListener('change', () => {
 
         tlScrubberContainer.addEventListener('mousedown', (e) => {
             isScrubbing = true;
+            scrubberRect = tlScrubberContainer.getBoundingClientRect();
             handleScrub(e);
         });
 
@@ -5077,6 +5114,7 @@ ecpStrokeWidth.addEventListener('change', () => {
 
         window.addEventListener('mouseup', () => {
             isScrubbing = false;
+            scrubberRect = null;
             if (scrubRAF) {
                 cancelAnimationFrame(scrubRAF);
                 scrubRAF = null;
@@ -5296,25 +5334,41 @@ ecpStrokeWidth.addEventListener('change', () => {
             }
         });
 
+        // ⚡ Bolt Optimization: Throttle marquee dragging DOM updates with requestAnimationFrame
+        let marqueeRAF = null;
+        let latestMarqueeX = 0;
+        let latestMarqueeY = 0;
+
         svgPreviewContainer.addEventListener('mousemove', (e) => {
             if (!isMarquee || !marqueeContainerRect) return;
-            const currentX = e.clientX - marqueeContainerRect.left;
-            const currentY = e.clientY - marqueeContainerRect.top;
+            latestMarqueeX = e.clientX;
+            latestMarqueeY = e.clientY;
 
-            const x = Math.min(marqueeStart.x, currentX);
-            const y = Math.min(marqueeStart.y, currentY);
-            const w = Math.abs(currentX - marqueeStart.x);
-            const h = Math.abs(currentY - marqueeStart.y);
+            if (marqueeRAF) return;
+            marqueeRAF = requestAnimationFrame(() => {
+                const currentX = latestMarqueeX - marqueeContainerRect.left;
+                const currentY = latestMarqueeY - marqueeContainerRect.top;
 
-            marqueeBox.style.left = x + 'px';
-            marqueeBox.style.top = y + 'px';
-            marqueeBox.style.width = w + 'px';
-            marqueeBox.style.height = h + 'px';
+                const x = Math.min(marqueeStart.x, currentX);
+                const y = Math.min(marqueeStart.y, currentY);
+                const w = Math.abs(currentX - marqueeStart.x);
+                const h = Math.abs(currentY - marqueeStart.y);
+
+                marqueeBox.style.left = x + 'px';
+                marqueeBox.style.top = y + 'px';
+                marqueeBox.style.width = w + 'px';
+                marqueeBox.style.height = h + 'px';
+                marqueeRAF = null;
+            });
         });
 
         window.addEventListener('mouseup', (e) => {
             if (!isMarquee) return;
             isMarquee = false;
+            if (marqueeRAF) {
+                cancelAnimationFrame(marqueeRAF);
+                marqueeRAF = null;
+            }
             marqueeContainerRect = null;
             marqueeBox.style.display = 'none';
 
