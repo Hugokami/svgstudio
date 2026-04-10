@@ -2173,50 +2173,79 @@
             elArray.forEach(el => {
                 if (!el.querySelectorAll || !el.removeAttribute) return;
                 
-                // 1. Remove SMIL animation elements
-                const smilSelector = options.type ? `animate[attributeName*="${options.type}"], animateTransform[attributeName*="${options.type}"], animateMotion, set` : 'animate, animateTransform, animateMotion, set';
-                el.querySelectorAll(smilSelector).forEach(a => { a.remove(); count++; });
-                
-                // 2. CSS Classes & Inline Style
-                if (options.all) {
-                    const elementsToClean = el.querySelectorAll ? [el, ...Array.from(el.querySelectorAll('[class], [style]'))] : [el];
-                    elementsToClean.forEach(target => {
-                        if (target.classList) {
-                            const toRemove = Array.from(target.classList).filter(c => c.startsWith('anim-'));
-                            toRemove.forEach(c => { target.classList.remove(c); count++; });
-                        }
-                        if (target.style && target.style.animation) { target.style.animation = ''; count++; }
-                    });
-                } else if (options.type) {
-                    const c = `anim-${options.type}`;
-                    const elementsToClean = el.querySelectorAll ? [el, ...Array.from(el.querySelectorAll(`.${c}`))] : [el];
-                    elementsToClean.forEach(target => {
-                        if (target.classList && target.classList.contains(c)) {
-                            target.classList.remove(c); count++;
-                        }
-                        // Also clear inline animation if it matches the name
-                        if (target.style && target.style.animation && target.style.animation.includes(options.type)) {
-                            target.style.animation = ''; count++;
-                        }
-                    });
-                }
+                                // ⚡ Bolt Optimization: Consolidate redundant querySelectorAll passes into a single TreeWalker traversal
+                // This significantly reduces layout thrashing and speeds up DOM modifications during animation stripping.
+                const walker = el.ownerDocument.createTreeWalker(el, 1 /* NodeFilter.SHOW_ELEMENT */, null, false);
+                let currentEl = el;
+                const toRemove = [];
 
-                // 3. Filters & Masks targeting our generated IDs
-                const f = el.getAttribute('filter');
-                if (f) {
-                    if (options.all || (options.type && (f.includes(options.type) || f.includes('anim'))) || animationKeywords.test(f)) {
-                        el.removeAttribute('filter'); count++;
+                do {
+                    const tag = currentEl.tagName.toLowerCase();
+
+                    // 1. Remove SMIL animation elements
+                    if (tag === 'animate' || tag === 'animatetransform' || tag === 'animatemotion' || tag === 'set') {
+                        if (!options.type || currentEl.getAttribute('attributeName')?.includes(options.type)) {
+                            toRemove.push(currentEl);
+                            continue; // Skip rest for removed elements
+                        }
                     }
-                }
-                const m = el.getAttribute('mask');
-                if (m) {
-                    if (options.all || (options.type && (m.includes(options.type) || m.includes('anim'))) || animationKeywords.test(m)) {
-                        el.removeAttribute('mask'); count++;
+
+                    // 2. CSS Classes & Inline Style
+                    if (options.all) {
+                        if (currentEl.hasAttribute('class')) {
+                            const classList = currentEl.classList;
+                            for (let j = classList.length - 1; j >= 0; j--) {
+                                const c = classList[j];
+                                if (c && c.startsWith('anim-')) {
+                                    classList.remove(c);
+                                    count++;
+                                }
+                            }
+                        }
+                        if (currentEl.style && currentEl.style.animation) {
+                            currentEl.style.animation = '';
+                            count++;
+                        }
+                    } else if (options.type) {
+                        const c = `anim-${options.type}`;
+                        if (currentEl.classList && currentEl.classList.contains(c)) {
+                            currentEl.classList.remove(c);
+                            count++;
+                        }
+                        if (currentEl.style && currentEl.style.animation && currentEl.style.animation.includes(options.type)) {
+                            currentEl.style.animation = '';
+                            count++;
+                        }
                     }
-                }
-                const cp = el.getAttribute('clip-path');
-                if (cp && animationKeywords.test(cp)) {
-                    el.removeAttribute('clip-path'); count++;
+
+                    // 3. Filters & Masks targeting our generated IDs
+                    if (currentEl.hasAttribute('filter')) {
+                        const f = currentEl.getAttribute('filter');
+                        if (f && (options.all || (options.type && (f.includes(options.type) || f.includes('anim'))) || animationKeywords.test(f))) {
+                            currentEl.removeAttribute('filter');
+                            count++;
+                        }
+                    }
+                    if (currentEl.hasAttribute('mask')) {
+                        const m = currentEl.getAttribute('mask');
+                        if (m && (options.all || (options.type && (m.includes(options.type) || m.includes('anim'))) || animationKeywords.test(m))) {
+                            currentEl.removeAttribute('mask');
+                            count++;
+                        }
+                    }
+                    if (currentEl.hasAttribute('clip-path')) {
+                        const cp = currentEl.getAttribute('clip-path');
+                        if (cp && animationKeywords.test(cp)) {
+                            currentEl.removeAttribute('clip-path');
+                            count++;
+                        }
+                    }
+
+                } while (currentEl = walker.nextNode());
+
+                for (let i = 0; i < toRemove.length; i++) {
+                    toRemove[i].remove();
+                    count++;
                 }
             });
 
