@@ -1,3 +1,6 @@
 ## 2024-05-24 - Unthrottled DOM reads during drag operations
 **Learning:** `svgviewer.html` is a large single-file application where layout thrashing is a primary performance bottleneck. Several drag operations (marquee selection, panning, scrubbing) were recalculating layout (e.g., `getBoundingClientRect`) or modifying DOM state inline during `mousemove` events without `requestAnimationFrame` throttling, causing unnecessary layout calculation on every frame.
 **Action:** When working with custom drag/drop or mousemove-driven interactions in this specific file, always implement `requestAnimationFrame` and ensure bounding rects are cached on `mousedown` rather than calculated on `mousemove`.
+## 2024-05-25 - JIT overhead in animation loops
+**Learning:** In the `updateTimelineUI` and `tlPlayPauseBtn` event loops, `new Function()` was being called every frame to evaluate dynamic math expressions for properties like `data-expr-x`. This causes heavy JIT parsing overhead and CPU usage because string interpolation and compilation happens ~60 times per second for every bound expression.
+**Action:** When implementing mathematical evaluations inside animation loops or `requestAnimationFrame`, always cache the compiled `Function` block in a map keyed by the raw expression string to avoid repeated parsing and compilation.
