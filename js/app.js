@@ -4310,7 +4310,12 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
             // Validate expression roughly
             try {
                 // Dummy evaluate
-                new Function('t', 'Math', `with(Math) { return ${expr}; }`)(0, Math);
+                // ⚡ Bolt Optimization: Cache JIT-compiled function evaluation
+                window.expressionCache = window.expressionCache || new Map();
+                if (!window.expressionCache.has('val_' + expr)) {
+                    window.expressionCache.set('val_' + expr, new Function('t', 'Math', `with(Math) { return ${expr}; }`));
+                }
+                window.expressionCache.get('val_' + expr)(0, Math);
             } catch (e) {
                 showToast('Invalid Expression!', true);
                 return;
@@ -4949,8 +4954,12 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
+                                // ⚡ Bolt Optimization: Cache JIT-compiled functions to prevent high-frequency recompilation overhead during GSAP animation ticks
+                                window.expressionCache = window.expressionCache || new Map();
+                                if (!window.expressionCache.has('anim_' + expr)) {
+                                    window.expressionCache.set('anim_' + expr, new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`));
+                                }
+                                const val = window.expressionCache.get('anim_' + expr)(
                                     t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
                                 );
                                 updates[prop] = val;
@@ -5013,8 +5022,12 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
+                                // ⚡ Bolt Optimization: Cache JIT-compiled functions to prevent high-frequency recompilation overhead during GSAP animation ticks
+                                window.expressionCache = window.expressionCache || new Map();
+                                if (!window.expressionCache.has('anim_' + expr)) {
+                                    window.expressionCache.set('anim_' + expr, new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`));
+                                }
+                                const val = window.expressionCache.get('anim_' + expr)(
                                     t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
                                 );
                                 updates[prop] = val;
