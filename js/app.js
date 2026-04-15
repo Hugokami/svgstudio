@@ -1312,13 +1312,46 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
 
         // Resizer Logic
         let isResizing = false;
-        resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
+        let resizerRAF = null;
+        let cachedBodyWidth = 0;
+        let resizerCurrentX = 0;
+
+        function updateResizerDOM() {
+            let newWidth = (resizerCurrentX / cachedBodyWidth) * 100;
+            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            resizerRAF = null;
+        }
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            cachedBodyWidth = document.body.clientWidth;
+            resizerCurrentX = e.clientX;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            e.preventDefault();
+        });
+
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            let newWidth = (e.clientX / document.body.clientWidth) * 100;
-            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            resizerCurrentX = e.clientX;
+            if (!resizerRAF) {
+                // ⚡ Bolt Optimization: Throttle resizer DOM updates and cache body width to prevent layout thrashing
+                resizerRAF = requestAnimationFrame(updateResizerDOM);
+            }
         });
-        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; } });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = 'default';
+                if (resizerRAF) {
+                    cancelAnimationFrame(resizerRAF);
+                    resizerRAF = null;
+                    updateResizerDOM();
+                }
+            }
+        });
 
         // Zoom & Pan
         function updateTransform() {
@@ -5046,28 +5079,36 @@ ecpStrokeWidth.addEventListener('change', () => {
         // Scrubbing logic
         let isScrubbing = false;
         let scrubRAF = null;
+        let cachedScrubberRect = null;
+        let scrubCurrentX = 0;
+
+        function applyScrub() {
+            const rect = cachedScrubberRect || tlScrubberContainer.getBoundingClientRect();
+            let x = scrubCurrentX - rect.left;
+            let progress = Math.max(0, Math.min(1, x / rect.width));
+
+            masterTimeline.progress(progress).pause();
+
+            const svg = svgTransformWrapper.querySelector('svg');
+            if (svg) {
+                svg.pauseAnimations();
+                svg.setCurrentTime(masterTimeline.time());
+            }
+            updateTimelineUI();
+            scrubRAF = null;
+        }
+
         function handleScrub(e) {
-            if (scrubRAF) return;
-            scrubRAF = requestAnimationFrame(() => {
-                const rect = tlScrubberContainer.getBoundingClientRect();
-                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-                let x = clientX - rect.left;
-                let progress = Math.max(0, Math.min(1, x / rect.width));
-
-                masterTimeline.progress(progress).pause();
-
-                const svg = svgTransformWrapper.querySelector('svg');
-                if (svg) {
-                    svg.pauseAnimations();
-                    svg.setCurrentTime(masterTimeline.time());
-                }
-                updateTimelineUI();
-                scrubRAF = null;
-            });
+            scrubCurrentX = e.clientX || (e.touches && e.touches[0].clientX);
+            if (!scrubRAF) {
+                // ⚡ Bolt Optimization: Throttle scrub operations and cache bounding rect
+                scrubRAF = requestAnimationFrame(applyScrub);
+            }
         }
 
         tlScrubberContainer.addEventListener('mousedown', (e) => {
             isScrubbing = true;
+            cachedScrubberRect = tlScrubberContainer.getBoundingClientRect();
             handleScrub(e);
         });
 
@@ -5076,10 +5117,13 @@ ecpStrokeWidth.addEventListener('change', () => {
         });
 
         window.addEventListener('mouseup', () => {
-            isScrubbing = false;
-            if (scrubRAF) {
-                cancelAnimationFrame(scrubRAF);
-                scrubRAF = null;
+            if (isScrubbing) {
+                isScrubbing = false;
+                if (scrubRAF) {
+                    cancelAnimationFrame(scrubRAF);
+                    scrubRAF = null;
+                    applyScrub();
+                }
             }
         });
 
