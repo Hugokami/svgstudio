@@ -4949,10 +4949,14 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Cache parsed expressions to avoid severe JIT compilation overhead at 60fps
+                                window.expressionCache = window.expressionCache || new Map();
+                                let exprFn = window.expressionCache.get(expr);
+                                if (!exprFn) {
+                                    exprFn = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    window.expressionCache.set(expr, exprFn);
+                                }
+                                const val = exprFn(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
@@ -5013,10 +5017,14 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Cache parsed expressions to avoid severe JIT compilation overhead at 60fps
+                                window.expressionCache = window.expressionCache || new Map();
+                                let exprFn = window.expressionCache.get(expr);
+                                if (!exprFn) {
+                                    exprFn = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    window.expressionCache.set(expr, exprFn);
+                                }
+                                const val = exprFn(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
