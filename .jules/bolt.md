@@ -1,3 +1,7 @@
 ## 2024-05-24 - Unthrottled DOM reads during drag operations
 **Learning:** `svgviewer.html` is a large single-file application where layout thrashing is a primary performance bottleneck. Several drag operations (marquee selection, panning, scrubbing) were recalculating layout (e.g., `getBoundingClientRect`) or modifying DOM state inline during `mousemove` events without `requestAnimationFrame` throttling, causing unnecessary layout calculation on every frame.
 **Action:** When working with custom drag/drop or mousemove-driven interactions in this specific file, always implement `requestAnimationFrame` and ensure bounding rects are cached on `mousedown` rather than calculated on `mousemove`.
+
+## 2024-05-25 - JIT Compilation overhead in GSAP animation ticks
+**Learning:** In the expressions evaluation block of `js/app.js` and `svgviewer.html`, `new Function(...)` was being dynamically created from strings (`expr`) inside a GSAP `masterTimeline` sync loop (`updateTimelineUI`). Because this function executes up to 60 times per second per element, invoking the JS compiler repeatedly to parse and compile strings causes severe CPU thrashing and garbage collection spikes.
+**Action:** Always cache dynamically evaluated strings/expressions using a `Map` (e.g., `window.expressionCache`) keyed by the expression string, particularly when the evaluation is tied to an animation frame or high-frequency event loop.

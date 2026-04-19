@@ -4950,9 +4950,12 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const expr = attr.value;
                             try {
                                 // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                window.expressionCache = window.expressionCache || new Map();
+                                if (!window.expressionCache.has(expr)) {
+                                    window.expressionCache.set(expr, new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`));
+                                }
+                                // ⚡ Bolt Optimization: Cache expression parsing to avoid JIT overhead in animation loops
+                                const val = window.expressionCache.get(expr)(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
@@ -5014,9 +5017,12 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const expr = attr.value;
                             try {
                                 // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                window.expressionCache = window.expressionCache || new Map();
+                                if (!window.expressionCache.has(expr)) {
+                                    window.expressionCache.set(expr, new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`));
+                                }
+                                // ⚡ Bolt Optimization: Cache expression parsing to avoid JIT overhead in animation loops
+                                const val = window.expressionCache.get(expr)(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
