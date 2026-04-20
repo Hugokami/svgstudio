@@ -5296,24 +5296,49 @@ ecpStrokeWidth.addEventListener('change', () => {
             }
         });
 
+        let marqueeRAF = null;
+        let lastMarqueeX = 0, lastMarqueeY = 0;
         svgPreviewContainer.addEventListener('mousemove', (e) => {
             if (!isMarquee || !marqueeContainerRect) return;
-            const currentX = e.clientX - marqueeContainerRect.left;
-            const currentY = e.clientY - marqueeContainerRect.top;
+            lastMarqueeX = e.clientX;
+            lastMarqueeY = e.clientY;
 
-            const x = Math.min(marqueeStart.x, currentX);
-            const y = Math.min(marqueeStart.y, currentY);
-            const w = Math.abs(currentX - marqueeStart.x);
-            const h = Math.abs(currentY - marqueeStart.y);
+            if (marqueeRAF) return;
 
-            marqueeBox.style.left = x + 'px';
-            marqueeBox.style.top = y + 'px';
-            marqueeBox.style.width = w + 'px';
-            marqueeBox.style.height = h + 'px';
+            // ⚡ Bolt Optimization: Throttled marquee drag with requestAnimationFrame to prevent layout thrashing
+            marqueeRAF = requestAnimationFrame(() => {
+                if (!isMarquee || !marqueeContainerRect) { marqueeRAF = null; return; }
+                const currentX = lastMarqueeX - marqueeContainerRect.left;
+                const currentY = lastMarqueeY - marqueeContainerRect.top;
+
+                const x = Math.min(marqueeStart.x, currentX);
+                const y = Math.min(marqueeStart.y, currentY);
+                const w = Math.abs(currentX - marqueeStart.x);
+                const h = Math.abs(currentY - marqueeStart.y);
+
+                marqueeBox.style.left = x + 'px';
+                marqueeBox.style.top = y + 'px';
+                marqueeBox.style.width = w + 'px';
+                marqueeBox.style.height = h + 'px';
+
+                marqueeRAF = null;
+            });
         });
 
         window.addEventListener('mouseup', (e) => {
             if (!isMarquee) return;
+            if (marqueeRAF) { cancelAnimationFrame(marqueeRAF); marqueeRAF = null; }
+            if (marqueeContainerRect) {
+                // Apply final position synchronously to prevent dropped update using the precise mouseup event
+                const currentX = e.clientX - marqueeContainerRect.left;
+                const currentY = e.clientY - marqueeContainerRect.top;
+                const x = Math.min(marqueeStart.x, currentX);
+                const y = Math.min(marqueeStart.y, currentY);
+                const w = Math.abs(currentX - marqueeStart.x);
+                const h = Math.abs(currentY - marqueeStart.y);
+                marqueeBox.style.left = x + 'px'; marqueeBox.style.top = y + 'px';
+                marqueeBox.style.width = w + 'px'; marqueeBox.style.height = h + 'px';
+            }
             isMarquee = false;
             marqueeContainerRect = null;
             marqueeBox.style.display = 'none';

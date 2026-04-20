@@ -7089,6 +7089,10 @@
         // ═══ UNIFIED POINTER EVENTS (PAN, MARQUEE, DRAG, SELECT) ═══
         let interactionMode = 'none'; // 'pan', 'marquee', 'drag'
         let ptrStartX = 0, ptrStartY = 0;
+    let dragRAF = null;
+    let marqueeRAF = null;
+    let lastEventX = 0;
+    let lastEventY = 0;
         let ptrMoved = false;
         let isSpaceDown = false;
         let dragOffsets = new Map();
@@ -7267,29 +7271,47 @@
                 });
             } else if (interactionMode === 'marquee') {
                 if (!marqueeContainerRect) return;
-                const currentX = e.clientX - marqueeContainerRect.left;
-                const currentY = e.clientY - marqueeContainerRect.top;
+                lastEventX = e.clientX;
+                lastEventY = e.clientY;
+                if (marqueeRAF) return;
 
-                const x = Math.min(marqueeStart.x, currentX);
-                const y = Math.min(marqueeStart.y, currentY);
-                const w = Math.abs(currentX - marqueeStart.x);
-                const h = Math.abs(currentY - marqueeStart.y);
+                // ⚡ Bolt Optimization: Throttled marquee drag with requestAnimationFrame to prevent layout thrashing
+                marqueeRAF = requestAnimationFrame(() => {
+                    if (interactionMode !== 'marquee' || !marqueeContainerRect) { marqueeRAF = null; return; }
+                    const currentX = lastEventX - marqueeContainerRect.left;
+                    const currentY = lastEventY - marqueeContainerRect.top;
 
-                marqueeBox.style.left = x + 'px';
-                marqueeBox.style.top = y + 'px';
-                marqueeBox.style.width = w + 'px';
-                marqueeBox.style.height = h + 'px';
+                    const x = Math.min(marqueeStart.x, currentX);
+                    const y = Math.min(marqueeStart.y, currentY);
+                    const w = Math.abs(currentX - marqueeStart.x);
+                    const h = Math.abs(currentY - marqueeStart.y);
+
+                    marqueeBox.style.left = x + 'px';
+                    marqueeBox.style.top = y + 'px';
+                    marqueeBox.style.width = w + 'px';
+                    marqueeBox.style.height = h + 'px';
+                    marqueeRAF = null;
+                });
             } else if (interactionMode === 'drag') {
-                const dx = (e.clientX - ptrStartX) / scale;
-                const dy = (e.clientY - ptrStartY) / scale;
+                lastEventX = e.clientX;
+                lastEventY = e.clientY;
+                if (dragRAF) return;
                 
-                selectedElements.forEach(el => {
-                    const startPos = dragOffsets.get(el);
-                    if (startPos) {
-                        const newX = startPos.tx + dx;
-                        const newY = startPos.ty + dy;
-                        el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
-                    }
+                // ⚡ Bolt Optimization: Throttled element dragging with requestAnimationFrame
+                dragRAF = requestAnimationFrame(() => {
+                    if (interactionMode !== 'drag') { dragRAF = null; return; }
+                    const dx = (lastEventX - ptrStartX) / scale;
+                    const dy = (lastEventY - ptrStartY) / scale;
+
+                    selectedElements.forEach(el => {
+                        const startPos = dragOffsets.get(el);
+                        if (startPos) {
+                            const newX = startPos.tx + dx;
+                            const newY = startPos.ty + dy;
+                            el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
+                        }
+                    });
+                    dragRAF = null;
                 });
             }
         });
@@ -7348,7 +7370,18 @@
                     deselectElement();
                 }
             } else if (interactionMode === 'drag') {
+                if (dragRAF) { cancelAnimationFrame(dragRAF); dragRAF = null; }
                 if (ptrMoved) {
+                    const dx = (e.clientX - ptrStartX) / scale;
+                    const dy = (e.clientY - ptrStartY) / scale;
+                    selectedElements.forEach(el => {
+                        const startPos = dragOffsets.get(el);
+                        if (startPos) {
+                            const newX = startPos.tx + dx;
+                            const newY = startPos.ty + dy;
+                            el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
+                        }
+                    });
                     updateEditorFromPreview();
                 }
             }
