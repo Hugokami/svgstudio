@@ -5296,25 +5296,38 @@ ecpStrokeWidth.addEventListener('change', () => {
             }
         });
 
+        let marqueeRAF = null;
+        let latestMarqueeEvent = null;
         svgPreviewContainer.addEventListener('mousemove', (e) => {
             if (!isMarquee || !marqueeContainerRect) return;
-            const currentX = e.clientX - marqueeContainerRect.left;
-            const currentY = e.clientY - marqueeContainerRect.top;
+            latestMarqueeEvent = e;
+            if (marqueeRAF) return; // ⚡ Bolt Optimization: Throttle marquee updates
+            marqueeRAF = requestAnimationFrame(() => {
+                if (!latestMarqueeEvent) return;
+                const currentX = latestMarqueeEvent.clientX - marqueeContainerRect.left;
+                const currentY = latestMarqueeEvent.clientY - marqueeContainerRect.top;
 
-            const x = Math.min(marqueeStart.x, currentX);
-            const y = Math.min(marqueeStart.y, currentY);
-            const w = Math.abs(currentX - marqueeStart.x);
-            const h = Math.abs(currentY - marqueeStart.y);
+                const x = Math.min(marqueeStart.x, currentX);
+                const y = Math.min(marqueeStart.y, currentY);
+                const w = Math.abs(currentX - marqueeStart.x);
+                const h = Math.abs(currentY - marqueeStart.y);
 
-            marqueeBox.style.left = x + 'px';
-            marqueeBox.style.top = y + 'px';
-            marqueeBox.style.width = w + 'px';
-            marqueeBox.style.height = h + 'px';
+                marqueeBox.style.left = x + 'px';
+                marqueeBox.style.top = y + 'px';
+                marqueeBox.style.width = w + 'px';
+                marqueeBox.style.height = h + 'px';
+                marqueeRAF = null;
+                latestMarqueeEvent = null;
+            });
         });
 
         window.addEventListener('mouseup', (e) => {
             if (!isMarquee) return;
             isMarquee = false;
+            if (marqueeRAF) {
+                cancelAnimationFrame(marqueeRAF);
+                marqueeRAF = null;
+            }
             marqueeContainerRect = null;
             marqueeBox.style.display = 'none';
 
