@@ -6916,13 +6916,23 @@
         function translateSMILToGSAP(svg) {
             if (!svg) return;
 
+            // ⚡ Bolt Optimization: Cache DOM lookups by ID to prevent repeated traversal
+            // when multiple animations target the same elements.
+            const idCache = new Map();
+
             const anims = svg.querySelectorAll('animate, animateTransform, animateMotion');
             anims.forEach(anim => {
                 // 1. Resolve Target
                 const href = anim.getAttribute('href') || anim.getAttribute('xlink:href');
                 let target;
                 if (href && href.startsWith('#')) {
-                    target = svg.getElementById(href.substring(1));
+                    const id = href.substring(1);
+                    if (idCache.has(id)) {
+                        target = idCache.get(id);
+                    } else {
+                        target = svg.getElementById(id);
+                        if (target) idCache.set(id, target);
+                    }
                 }
                 if (!target) target = anim.parentNode;
                 if (!target || target.tagName === 'svg') return;
