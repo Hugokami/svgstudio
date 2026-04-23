@@ -1,3 +1,7 @@
 ## 2024-05-24 - Unthrottled DOM reads during drag operations
 **Learning:** `svgviewer.html` is a large single-file application where layout thrashing is a primary performance bottleneck. Several drag operations (marquee selection, panning, scrubbing) were recalculating layout (e.g., `getBoundingClientRect`) or modifying DOM state inline during `mousemove` events without `requestAnimationFrame` throttling, causing unnecessary layout calculation on every frame.
 **Action:** When working with custom drag/drop or mousemove-driven interactions in this specific file, always implement `requestAnimationFrame` and ensure bounding rects are cached on `mousedown` rather than calculated on `mousemove`.
+
+## 2024-05-18 - [Throttle Drag Updates with rAF]
+**Learning:** In both `js/app.js` and `svgviewer.html`, `mousemove` event listeners updating DOM layout (like the editor resizer) were firing without throttling, causing potential layout thrashing as synchronous DOM reads (`clientWidth`) and writes (`style.flex`) were executed in rapid succession on every mouse move.
+**Action:** Always throttle continuous pointer events updating DOM with `requestAnimationFrame`. Cache necessary read values (like `clientWidth`) at interaction start (`mousedown`), update a temporary variable on `mousemove`, let a single rAF apply the layout changes, and force a final synchronous update on `mouseup` while clearing the rAF queue.
