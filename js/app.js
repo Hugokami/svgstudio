@@ -4688,58 +4688,49 @@ ecpStrokeWidth.addEventListener('change', () => {
 
                 let removed = 0;
 
-                // 1. Remove all SMIL animation elements
-                svg.querySelectorAll('animate, animateTransform, animateMotion, set').forEach(el => {
-                    el.remove();
-                    removed++;
-                });
+                // ⚡ Bolt Optimization: Consolidate sequential DOM queries into a single TreeWalker traversal
+                const walker = doc.createTreeWalker(svg, NodeFilter.SHOW_ELEMENT, null, false);
+                let node;
+                const nodesToRemove = [];
 
-                // 2. Remove all anim-* CSS classes from elements
-                svg.querySelectorAll('[class]').forEach(el => {
-                    const classes = Array.from(el.classList).filter(c => c.startsWith('anim-'));
-                    classes.forEach(c => { el.classList.remove(c); removed++; });
-                    el.style.animation = '';
-                });
-
-                // 3. Clean up animation-related SVG filters
+                // Remove specific definitions directly first to avoid full traversal checks
                 ['#animNeonFilter', '#animGlitchFilter', '#animGooeyFilter', '#holoFilter', '#crtFilter', '#moshFilter', '#heatFilter', '#liquidFilter', '#cyberGrad', '#cyberMask', '#scanlineFilter', '#scanPattern', '#scanMask', '#pixelateFilter', '#colorCycleFilter', '#textGlitchFilter'].forEach(sel => {
                     const el = svg.querySelector(sel);
                     if (el) { el.remove(); removed++; }
                 });
 
-                // 4. Remove filter attributes from elements
-                svg.querySelectorAll('[filter]').forEach(el => {
-                    const f = el.getAttribute('filter');
-                    if (f && f.includes('anim') || f.includes('holo') || f.includes('crt') || f.includes('mosh') || f.includes('heat') || f.includes('liquid') || f.includes('cyber') || f.includes('goo') || f.includes('textGlitch')) {
-                        el.removeAttribute('filter');
-                        removed++;
-                    }
-                });
+                while (node = walker.nextNode()) {
+                    const tag = node.tagName.toLowerCase();
 
-                // 5. Clean @keyframes from <style> elements
-                svg.querySelectorAll('style').forEach(styleEl => {
-                    let css = styleEl.textContent;
-                    // Remove @keyframes blocks
-                    css = css.replace(/@keyframes[^{]+\{(?:[^{}]*|\{[^{}]*\})*\}/g, '');
-                    // Remove .anim-* selector blocks
-                    css = css.replace(/\.anim-[^{]+\{[^}]*\}/g, '');
-                    css = css.trim();
-                    if (!css) {
-                        styleEl.remove();
+                    if (tag === 'animate' || tag === 'animatetransform' || tag === 'animatemotion' || tag === 'set') {
+                        nodesToRemove.push(node);
+                    } else if (tag === 'style') {
+                        let css = node.textContent;
+                        css = css.replace(/@keyframes[^{]+\{(?:[^{}]*|\{[^{}]*\})*\}/g, '');
+                        css = css.replace(/\.anim-[^{]+\{[^}]*\}/g, '');
+                        css = css.trim();
+                        if (!css) { nodesToRemove.push(node); } else { node.textContent = css; }
+                        removed++;
                     } else {
-                        styleEl.textContent = css;
+                        if (node.hasAttribute('class')) {
+                            const classes = Array.from(node.classList).filter(c => c.startsWith('anim-'));
+                            classes.forEach(c => { node.classList.remove(c); removed++; });
+                            if (node.style) node.style.animation = '';
+                        }
+                        if (node.hasAttribute('filter')) {
+                            const f = node.getAttribute('filter');
+                            if (f && (f.includes('anim') || f.includes('holo') || f.includes('crt') || f.includes('mosh') || f.includes('heat') || f.includes('liquid') || f.includes('cyber') || f.includes('goo') || f.includes('textGlitch'))) {
+                                node.removeAttribute('filter'); removed++;
+                            }
+                        }
+                        if (node.hasAttribute('mask')) {
+                            const m = node.getAttribute('mask');
+                            if (m && m.includes('cyber')) { node.removeAttribute('mask'); removed++; }
+                        }
                     }
-                    removed++;
-                });
+                }
 
-                // 6. Remove mask attributes from elements
-                svg.querySelectorAll('[mask]').forEach(el => {
-                    const m = el.getAttribute('mask');
-                    if (m && m.includes('cyber')) {
-                        el.removeAttribute('mask');
-                        removed++;
-                    }
-                });
+                nodesToRemove.forEach(el => { el.remove(); removed++; });
 
                 if (removed > 0) {
                     let newSvgString = new XMLSerializer().serializeToString(doc);
