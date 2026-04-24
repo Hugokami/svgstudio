@@ -2170,59 +2170,14 @@
 
             const animationKeywords = /anim|holo|aura|mosh|crt|heat|liquid|glow|pixel|cycle|glitch|spectrum|neon|cyber|scan|wiggle|echo|typewriter|wipe|flip|jelly|draw|dash|stroke/i;
 
-            elArray.forEach(el => {
-                if (!el.querySelectorAll || !el.removeAttribute) return;
-                
-                // 1. Remove SMIL animation elements
-                const smilSelector = options.type ? `animate[attributeName*="${options.type}"], animateTransform[attributeName*="${options.type}"], animateMotion, set` : 'animate, animateTransform, animateMotion, set';
-                el.querySelectorAll(smilSelector).forEach(a => { a.remove(); count++; });
-                
-                // 2. CSS Classes & Inline Style
-                if (options.all) {
-                    const elementsToClean = el.querySelectorAll ? [el, ...Array.from(el.querySelectorAll('[class], [style]'))] : [el];
-                    elementsToClean.forEach(target => {
-                        if (target.classList) {
-                            const toRemove = Array.from(target.classList).filter(c => c.startsWith('anim-'));
-                            toRemove.forEach(c => { target.classList.remove(c); count++; });
-                        }
-                        if (target.style && target.style.animation) { target.style.animation = ''; count++; }
-                    });
-                } else if (options.type) {
-                    const c = `anim-${options.type}`;
-                    const elementsToClean = el.querySelectorAll ? [el, ...Array.from(el.querySelectorAll(`.${c}`))] : [el];
-                    elementsToClean.forEach(target => {
-                        if (target.classList && target.classList.contains(c)) {
-                            target.classList.remove(c); count++;
-                        }
-                        // Also clear inline animation if it matches the name
-                        if (target.style && target.style.animation && target.style.animation.includes(options.type)) {
-                            target.style.animation = ''; count++;
-                        }
-                    });
-                }
-
-                // 3. Filters & Masks targeting our generated IDs
-                const f = el.getAttribute('filter');
-                if (f) {
-                    if (options.all || (options.type && (f.includes(options.type) || f.includes('anim'))) || animationKeywords.test(f)) {
-                        el.removeAttribute('filter'); count++;
-                    }
-                }
-                const m = el.getAttribute('mask');
-                if (m) {
-                    if (options.all || (options.type && (m.includes(options.type) || m.includes('anim'))) || animationKeywords.test(m)) {
-                        el.removeAttribute('mask'); count++;
-                    }
-                }
-                const cp = el.getAttribute('clip-path');
-                if (cp && animationKeywords.test(cp)) {
-                    el.removeAttribute('clip-path'); count++;
-                }
-            });
-
-            // 4. Global Cleanup (Defs & Style) - only if stripping entire SVG
+            // ⚡ Bolt Optimization: Consolidate sequential DOM queries into a single TreeWalker traversal
             if (options.all && !elements) {
-                // Remove orphaned filter/mask/gradient/pattern elements in <defs>
+                // Whole document cleanup using a single TreeWalker pass
+                const walker = svg.ownerDocument.createTreeWalker(svg, NodeFilter.SHOW_ELEMENT, null, false);
+                let node;
+                const nodesToRemove = [];
+
+                // 1. Defs direct query (faster than checking every node's ID)
                 const defsSelectors = [
                     '[id*="anim"]', '[id*="holo"]', '[id*="aura"]', '[id^="spectrum"]', 
                     '[id*="mosh"]', '[id*="crt"]', '[id*="heat"]', '[id*="liquid"]',
@@ -2236,25 +2191,102 @@
                     });
                 });
 
-            // 5. Global Style Cleanup (Always clean orphaned anim classes if all:true)
-            if (options.all) {
-                svg.querySelectorAll('style').forEach(styleEl => {
-                    let css = styleEl.textContent;
-                    // Remove `.anim-*` classes from style tag
-                    css = css.replace(/\.anim-[\w-]+\s*\{[^}]*\}/g, () => { count++; return ''; });
+                // 2. Single TreeWalker pass for everything else
+                while (node = walker.nextNode()) {
+                    const tag = node.tagName.toLowerCase();
                     
-                    // If stripping everything (not just elements), also remove @keyframes matching keywords
-                    if (!elements) {
+                    if (tag === 'animate' || tag === 'animatetransform' || tag === 'animatemotion' || tag === 'set') {
+                        nodesToRemove.push(node);
+                    } else if (tag === 'style') {
+                        let css = node.textContent;
+                        css = css.replace(/\.anim-[\w-]+\s*\{[^}]*\}/g, () => { count++; return ''; });
                         css = css.replace(/@keyframes\s+[\w-]+\s*\{(?:[^{}]*|\{[^{}]*\})*\}/g, (match) => {
                             if (animationKeywords.test(match)) { count++; return ''; }
                             return match;
                         });
+                        css = css.trim();
+                        if (!css) { nodesToRemove.push(node); } else { node.textContent = css; }
+                        count++;
+                    } else {
+                        if (node.hasAttribute('class')) {
+                            const classes = Array.from(node.classList).filter(c => c.startsWith('anim-'));
+                            classes.forEach(c => { node.classList.remove(c); count++; });
+                        }
+                        if (node.style && node.style.animation) { node.style.animation = ''; count++; }
+
+                        if (node.hasAttribute('filter')) {
+                            const f = node.getAttribute('filter');
+                            if (f && (animationKeywords.test(f) || f.includes('anim'))) {
+                                node.removeAttribute('filter'); count++;
+                            }
+                        }
+                        if (node.hasAttribute('mask')) {
+                            const m = node.getAttribute('mask');
+                            if (m && (animationKeywords.test(m) || m.includes('anim'))) {
+                                node.removeAttribute('mask'); count++;
+                            }
+                        }
+                        if (node.hasAttribute('clip-path')) {
+                            const cp = node.getAttribute('clip-path');
+                            if (cp && animationKeywords.test(cp)) {
+                                node.removeAttribute('clip-path'); count++;
+                            }
+                        }
                     }
+                }
+                nodesToRemove.forEach(el => { el.remove(); count++; });
+
+            } else {
+                // Fallback for selective element/type stripping
+                elArray.forEach(el => {
+                    if (!el.querySelectorAll || !el.removeAttribute) return;
+
+                    // 1. Remove SMIL animation elements
+                    const smilSelector = options.type ? `animate[attributeName*="${options.type}"], animateTransform[attributeName*="${options.type}"], animateMotion, set` : 'animate, animateTransform, animateMotion, set';
+                    el.querySelectorAll(smilSelector).forEach(a => { a.remove(); count++; });
                     
-                    styleEl.textContent = css.trim();
-                    if (!styleEl.textContent && !elements) { styleEl.remove(); count++; }
+                    // 2. CSS Classes & Inline Style
+                    if (options.all) {
+                        const elementsToClean = el.querySelectorAll ? [el, ...Array.from(el.querySelectorAll('[class], [style]'))] : [el];
+                        elementsToClean.forEach(target => {
+                            if (target.classList) {
+                                const toRemove = Array.from(target.classList).filter(c => c.startsWith('anim-'));
+                                toRemove.forEach(c => { target.classList.remove(c); count++; });
+                            }
+                            if (target.style && target.style.animation) { target.style.animation = ''; count++; }
+                        });
+                    } else if (options.type) {
+                        const c = `anim-${options.type}`;
+                        const elementsToClean = el.querySelectorAll ? [el, ...Array.from(el.querySelectorAll(`.${c}`))] : [el];
+                        elementsToClean.forEach(target => {
+                            if (target.classList && target.classList.contains(c)) {
+                                target.classList.remove(c); count++;
+                            }
+                            // Also clear inline animation if it matches the name
+                            if (target.style && target.style.animation && target.style.animation.includes(options.type)) {
+                                target.style.animation = ''; count++;
+                            }
+                        });
+                    }
+
+                    // 3. Filters & Masks targeting our generated IDs
+                    const f = el.getAttribute('filter');
+                    if (f) {
+                        if (options.all || (options.type && (f.includes(options.type) || f.includes('anim'))) || animationKeywords.test(f)) {
+                            el.removeAttribute('filter'); count++;
+                        }
+                    }
+                    const m = el.getAttribute('mask');
+                    if (m) {
+                        if (options.all || (options.type && (m.includes(options.type) || m.includes('anim'))) || animationKeywords.test(m)) {
+                            el.removeAttribute('mask'); count++;
+                        }
+                    }
+                    const cp = el.getAttribute('clip-path');
+                    if (cp && animationKeywords.test(cp)) {
+                        el.removeAttribute('clip-path'); count++;
+                    }
                 });
-            }
             }
 
             return count;
