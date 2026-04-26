@@ -5296,10 +5296,14 @@ ecpStrokeWidth.addEventListener('change', () => {
             }
         });
 
-        svgPreviewContainer.addEventListener('mousemove', (e) => {
-            if (!isMarquee || !marqueeContainerRect) return;
-            const currentX = e.clientX - marqueeContainerRect.left;
-            const currentY = e.clientY - marqueeContainerRect.top;
+        let marqueeRAF = null;
+        let latestMarqueeEvent = null;
+
+        const updateMarqueeBox = () => {
+            if (!isMarquee || !marqueeContainerRect || !latestMarqueeEvent) return;
+
+            const currentX = latestMarqueeEvent.clientX - marqueeContainerRect.left;
+            const currentY = latestMarqueeEvent.clientY - marqueeContainerRect.top;
 
             const x = Math.min(marqueeStart.x, currentX);
             const y = Math.min(marqueeStart.y, currentY);
@@ -5310,11 +5314,31 @@ ecpStrokeWidth.addEventListener('change', () => {
             marqueeBox.style.top = y + 'px';
             marqueeBox.style.width = w + 'px';
             marqueeBox.style.height = h + 'px';
+
+            marqueeRAF = null;
+        };
+
+        svgPreviewContainer.addEventListener('mousemove', (e) => {
+            if (!isMarquee || !marqueeContainerRect) return;
+
+            latestMarqueeEvent = e;
+            if (!marqueeRAF) {
+                // ⚡ Bolt Optimization: Throttle marquee dragging DOM updates with requestAnimationFrame
+                marqueeRAF = requestAnimationFrame(updateMarqueeBox);
+            }
         });
 
         window.addEventListener('mouseup', (e) => {
             if (!isMarquee) return;
             isMarquee = false;
+
+            // Flush final pending frame synchronously to capture last coordinates
+            if (marqueeRAF) {
+                cancelAnimationFrame(marqueeRAF);
+                marqueeRAF = null;
+                updateMarqueeBox();
+            }
+
             marqueeContainerRect = null;
             marqueeBox.style.display = 'none';
 

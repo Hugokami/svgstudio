@@ -7088,6 +7088,25 @@
 
         // ═══ UNIFIED POINTER EVENTS (PAN, MARQUEE, DRAG, SELECT) ═══
         let interactionMode = 'none'; // 'pan', 'marquee', 'drag'
+        let marqueeRAF = null;
+        let latestMarqueeEvent = null;
+
+        const updateMarqueeBox = () => {
+            if (!marqueeContainerRect || !latestMarqueeEvent) return;
+            const currentX = latestMarqueeEvent.clientX - marqueeContainerRect.left;
+            const currentY = latestMarqueeEvent.clientY - marqueeContainerRect.top;
+
+            const x = Math.min(marqueeStart.x, currentX);
+            const y = Math.min(marqueeStart.y, currentY);
+            const w = Math.abs(currentX - marqueeStart.x);
+            const h = Math.abs(currentY - marqueeStart.y);
+
+            marqueeBox.style.left = x + 'px';
+            marqueeBox.style.top = y + 'px';
+            marqueeBox.style.width = w + 'px';
+            marqueeBox.style.height = h + 'px';
+            marqueeRAF = null;
+        };
         let ptrStartX = 0, ptrStartY = 0;
         let ptrMoved = false;
         let isSpaceDown = false;
@@ -7267,18 +7286,12 @@
                 });
             } else if (interactionMode === 'marquee') {
                 if (!marqueeContainerRect) return;
-                const currentX = e.clientX - marqueeContainerRect.left;
-                const currentY = e.clientY - marqueeContainerRect.top;
 
-                const x = Math.min(marqueeStart.x, currentX);
-                const y = Math.min(marqueeStart.y, currentY);
-                const w = Math.abs(currentX - marqueeStart.x);
-                const h = Math.abs(currentY - marqueeStart.y);
-
-                marqueeBox.style.left = x + 'px';
-                marqueeBox.style.top = y + 'px';
-                marqueeBox.style.width = w + 'px';
-                marqueeBox.style.height = h + 'px';
+                latestMarqueeEvent = e;
+                if (!marqueeRAF) {
+                    // ⚡ Bolt Optimization: Throttle marquee dragging DOM updates with requestAnimationFrame
+                    marqueeRAF = requestAnimationFrame(updateMarqueeBox);
+                }
             } else if (interactionMode === 'drag') {
                 const dx = (e.clientX - ptrStartX) / scale;
                 const dy = (e.clientY - ptrStartY) / scale;
@@ -7304,6 +7317,12 @@
             if (interactionMode === 'pan') {
                 svgPreviewContainer.style.cursor = isSpaceDown ? 'grab' : '';
             } else if (interactionMode === 'marquee') {
+                // Flush final pending frame synchronously to capture last coordinates
+                if (marqueeRAF) {
+                    cancelAnimationFrame(marqueeRAF);
+                    marqueeRAF = null;
+                    updateMarqueeBox();
+                }
                 // IMPORTANT: Capture rect BEFORE hiding, otherwise getBoundingClientRect returns zeros
                 const mRect = marqueeBox.getBoundingClientRect();
                 marqueeContainerRect = null;
