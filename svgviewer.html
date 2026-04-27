@@ -3337,13 +3337,42 @@
 
         // Resizer Logic
         let isResizing = false;
-        resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
+        let resizeRAF = null;
+        let resizerClientX = 0;
+        let cachedBodyWidth = 0;
+
+        function applyResize() {
+            let newWidth = (resizerClientX / cachedBodyWidth) * 100;
+            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            resizeRAF = null;
+        }
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            // ⚡ Bolt Optimization: Cache body width on interaction start
+            cachedBodyWidth = document.body.clientWidth;
+            e.preventDefault();
+        });
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            let newWidth = (e.clientX / document.body.clientWidth) * 100;
-            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            resizerClientX = e.clientX;
+            // ⚡ Bolt Optimization: Throttle continuous layout updates
+            if (!resizeRAF) resizeRAF = requestAnimationFrame(applyResize);
         });
-        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; } });
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = 'default';
+                if (resizeRAF) {
+                    cancelAnimationFrame(resizeRAF);
+                    resizeRAF = null;
+                    applyResize(); // ensure exact final position
+                }
+            }
+        });
 
         // Zoom & Pan
         function updateTransform() {
@@ -7095,6 +7124,12 @@
         let marqueeStart = { x: 0, y: 0 };
         let marqueeContainerRect = null;
         let panRAF = null;
+        let marqueeRAF = null;
+        let dragRAF = null;
+        let marqueeCurrentX = 0;
+        let marqueeCurrentY = 0;
+        let dragCurrentX = 0;
+        let dragCurrentY = 0;
 
         let marqueeBox = document.createElement('div');
         marqueeBox.className = 'marquee-box';
@@ -7267,34 +7302,84 @@
                 });
             } else if (interactionMode === 'marquee') {
                 if (!marqueeContainerRect) return;
-                const currentX = e.clientX - marqueeContainerRect.left;
-                const currentY = e.clientY - marqueeContainerRect.top;
 
-                const x = Math.min(marqueeStart.x, currentX);
-                const y = Math.min(marqueeStart.y, currentY);
-                const w = Math.abs(currentX - marqueeStart.x);
-                const h = Math.abs(currentY - marqueeStart.y);
+                marqueeCurrentX = e.clientX;
+                marqueeCurrentY = e.clientY;
 
-                marqueeBox.style.left = x + 'px';
-                marqueeBox.style.top = y + 'px';
-                marqueeBox.style.width = w + 'px';
-                marqueeBox.style.height = h + 'px';
+                // ⚡ Bolt Optimization: Throttle marquee updates
+                if (!marqueeRAF) marqueeRAF = requestAnimationFrame(() => {
+                    const currentX = marqueeCurrentX - marqueeContainerRect.left;
+                    const currentY = marqueeCurrentY - marqueeContainerRect.top;
+
+                    const x = Math.min(marqueeStart.x, currentX);
+                    const y = Math.min(marqueeStart.y, currentY);
+                    const w = Math.abs(currentX - marqueeStart.x);
+                    const h = Math.abs(currentY - marqueeStart.y);
+
+                    marqueeBox.style.left = x + 'px';
+                    marqueeBox.style.top = y + 'px';
+                    marqueeBox.style.width = w + 'px';
+                    marqueeBox.style.height = h + 'px';
+                    marqueeRAF = null;
+                });
             } else if (interactionMode === 'drag') {
-                const dx = (e.clientX - ptrStartX) / scale;
-                const dy = (e.clientY - ptrStartY) / scale;
+                dragCurrentX = e.clientX;
+                dragCurrentY = e.clientY;
                 
-                selectedElements.forEach(el => {
-                    const startPos = dragOffsets.get(el);
-                    if (startPos) {
-                        const newX = startPos.tx + dx;
-                        const newY = startPos.ty + dy;
-                        el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
-                    }
+                // ⚡ Bolt Optimization: Throttle drag transforms
+                if (!dragRAF) dragRAF = requestAnimationFrame(() => {
+                    const dx = (dragCurrentX - ptrStartX) / scale;
+                    const dy = (dragCurrentY - ptrStartY) / scale;
+
+                    selectedElements.forEach(el => {
+                        const startPos = dragOffsets.get(el);
+                        if (startPos) {
+                            const newX = startPos.tx + dx;
+                            const newY = startPos.ty + dy;
+                            el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
+                        }
+                    });
+                    dragRAF = null;
                 });
             }
         });
 
         window.addEventListener('pointerup', (e) => {
+            if (marqueeRAF) {
+                cancelAnimationFrame(marqueeRAF);
+                marqueeRAF = null;
+                // Final flush of position
+                if (interactionMode === 'marquee' && marqueeContainerRect) {
+                    const currentX = marqueeCurrentX - marqueeContainerRect.left;
+                    const currentY = marqueeCurrentY - marqueeContainerRect.top;
+                    const x = Math.min(marqueeStart.x, currentX);
+                    const y = Math.min(marqueeStart.y, currentY);
+                    const w = Math.abs(currentX - marqueeStart.x);
+                    const h = Math.abs(currentY - marqueeStart.y);
+                    marqueeBox.style.left = x + 'px';
+                    marqueeBox.style.top = y + 'px';
+                    marqueeBox.style.width = w + 'px';
+                    marqueeBox.style.height = h + 'px';
+                }
+            }
+            if (dragRAF) {
+                cancelAnimationFrame(dragRAF);
+                dragRAF = null;
+                // Final flush of position
+                if (interactionMode === 'drag') {
+                    const dx = (dragCurrentX - ptrStartX) / scale;
+                    const dy = (dragCurrentY - ptrStartY) / scale;
+                    selectedElements.forEach(el => {
+                        const startPos = dragOffsets.get(el);
+                        if (startPos) {
+                            const newX = startPos.tx + dx;
+                            const newY = startPos.ty + dy;
+                            el.setAttribute('transform', `translate(${newX}, ${newY}) ${startPos.cleanTransform}`.trim());
+                        }
+                    });
+                }
+            }
+
             if (interactionMode === 'none') {
                 const isCanvasBackground = e.target === svgPreviewContainer || e.target === svgTransformWrapper || e.target === svgTransformWrapper.querySelector('svg');
                 if (isCanvasBackground && !e.shiftKey && !ptrMoved) deselectElement();

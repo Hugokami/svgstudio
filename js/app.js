@@ -1312,13 +1312,42 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
 
         // Resizer Logic
         let isResizing = false;
-        resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; e.preventDefault(); });
+        let resizeRAF = null;
+        let resizerClientX = 0;
+        let cachedBodyWidth = 0;
+
+        function applyResize() {
+            let newWidth = (resizerClientX / cachedBodyWidth) * 100;
+            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            resizeRAF = null;
+        }
+
+        resizer.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            resizer.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            // ⚡ Bolt Optimization: Cache body width on interaction start
+            cachedBodyWidth = document.body.clientWidth;
+            e.preventDefault();
+        });
         document.addEventListener('mousemove', (e) => {
             if (!isResizing) return;
-            let newWidth = (e.clientX / document.body.clientWidth) * 100;
-            editorSection.style.flex = `0 0 ${Math.max(20, Math.min(newWidth, 80))}%`;
+            resizerClientX = e.clientX;
+            // ⚡ Bolt Optimization: Throttle continuous layout updates
+            if (!resizeRAF) resizeRAF = requestAnimationFrame(applyResize);
         });
-        document.addEventListener('mouseup', () => { if (isResizing) { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; } });
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                resizer.classList.remove('active');
+                document.body.style.cursor = 'default';
+                if (resizeRAF) {
+                    cancelAnimationFrame(resizeRAF);
+                    resizeRAF = null;
+                    applyResize(); // ensure exact final position
+                }
+            }
+        });
 
         // Zoom & Pan
         function updateTransform() {
@@ -5296,10 +5325,13 @@ ecpStrokeWidth.addEventListener('change', () => {
             }
         });
 
-        svgPreviewContainer.addEventListener('mousemove', (e) => {
-            if (!isMarquee || !marqueeContainerRect) return;
-            const currentX = e.clientX - marqueeContainerRect.left;
-            const currentY = e.clientY - marqueeContainerRect.top;
+        let marqueeRAF = null;
+        let marqueeCurrentX = 0;
+        let marqueeCurrentY = 0;
+
+        function applyMarquee() {
+            const currentX = marqueeCurrentX - marqueeContainerRect.left;
+            const currentY = marqueeCurrentY - marqueeContainerRect.top;
 
             const x = Math.min(marqueeStart.x, currentX);
             const y = Math.min(marqueeStart.y, currentY);
@@ -5310,6 +5342,16 @@ ecpStrokeWidth.addEventListener('change', () => {
             marqueeBox.style.top = y + 'px';
             marqueeBox.style.width = w + 'px';
             marqueeBox.style.height = h + 'px';
+            marqueeRAF = null;
+        }
+
+        svgPreviewContainer.addEventListener('mousemove', (e) => {
+            if (!isMarquee || !marqueeContainerRect) return;
+            marqueeCurrentX = e.clientX;
+            marqueeCurrentY = e.clientY;
+
+            // ⚡ Bolt Optimization: Throttle marquee box rendering with requestAnimationFrame
+            if (!marqueeRAF) marqueeRAF = requestAnimationFrame(applyMarquee);
         });
 
         window.addEventListener('mouseup', (e) => {
@@ -5317,6 +5359,10 @@ ecpStrokeWidth.addEventListener('change', () => {
             isMarquee = false;
             marqueeContainerRect = null;
             marqueeBox.style.display = 'none';
+            if (marqueeRAF) {
+                cancelAnimationFrame(marqueeRAF);
+                marqueeRAF = null;
+            }
 
             const mRect = marqueeBox.getBoundingClientRect();
             // If the box is basically a click, do nothing
