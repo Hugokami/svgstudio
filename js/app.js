@@ -1339,17 +1339,33 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
             isPanning = true; startX = e.clientX - panX; startY = e.clientY - panY;
         });
         let panRAF = null;
+        let lastPanX = 0;
+        let lastPanY = 0;
         window.addEventListener('mousemove', (e) => {
             if (!isPanning) return;
+            // ⚡ Bolt Optimization: Cache coordinates instead of dropping frames
+            lastPanX = e.clientX;
+            lastPanY = e.clientY;
             if (panRAF) return;
             panRAF = requestAnimationFrame(() => {
-                panX = e.clientX - startX;
-                panY = e.clientY - startY;
+                panX = lastPanX - startX;
+                panY = lastPanY - startY;
                 updateTransform();
                 panRAF = null;
             });
         });
-        window.addEventListener('mouseup', () => isPanning = false);
+        window.addEventListener('mouseup', (e) => {
+            if (isPanning) {
+                isPanning = false;
+                if (panRAF) {
+                    cancelAnimationFrame(panRAF);
+                    panRAF = null;
+                }
+                panX = e.clientX - startX;
+                panY = e.clientY - startY;
+                updateTransform();
+            }
+        });
 
         // Export PNG, GIF, & WebM
         exportPngBtn.addEventListener('click', () => {
@@ -4949,10 +4965,14 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Cache Function compilation
+                                if (!window.expressionCache) window.expressionCache = new Map();
+                                let func = window.expressionCache.get(expr);
+                                if (!func) {
+                                    func = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    window.expressionCache.set(expr, func);
+                                }
+                                const val = func(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
@@ -5013,10 +5033,14 @@ ecpStrokeWidth.addEventListener('change', () => {
                             const prop = attr.name.replace('data-expr-', '');
                             const expr = attr.value;
                             try {
-                                // Expose common math functions globally for the expression
-                                const val = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`)(
-                                    t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI
-                                );
+                                // ⚡ Bolt Optimization: Cache Function compilation
+                                if (!window.expressionCache) window.expressionCache = new Map();
+                                let func = window.expressionCache.get(expr);
+                                if (!func) {
+                                    func = new Function('t', 'sin', 'cos', 'tan', 'abs', 'PI', `return ${expr};`);
+                                    window.expressionCache.set(expr, func);
+                                }
+                                const val = func(t, Math.sin, Math.cos, Math.tan, Math.abs, Math.PI);
                                 updates[prop] = val;
                             } catch (e) {
                                 // Silent fail for bad mid-frame expressions
@@ -5046,11 +5070,15 @@ ecpStrokeWidth.addEventListener('change', () => {
         // Scrubbing logic
         let isScrubbing = false;
         let scrubRAF = null;
+        let lastScrubClientX = 0;
+        let cachedScrubRect = null;
         function handleScrub(e) {
+            // ⚡ Bolt Optimization: Cache coordinates and bounding rect instead of recalculating on every frame and dropping frames
+            lastScrubClientX = e.clientX || (e.touches && e.touches[0].clientX);
             if (scrubRAF) return;
             scrubRAF = requestAnimationFrame(() => {
-                const rect = tlScrubberContainer.getBoundingClientRect();
-                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const rect = cachedScrubRect || tlScrubberContainer.getBoundingClientRect();
+                const clientX = lastScrubClientX;
                 let x = clientX - rect.left;
                 let progress = Math.max(0, Math.min(1, x / rect.width));
 
@@ -5068,6 +5096,8 @@ ecpStrokeWidth.addEventListener('change', () => {
 
         tlScrubberContainer.addEventListener('mousedown', (e) => {
             isScrubbing = true;
+            // ⚡ Bolt Optimization: Cache bounding rect on mousedown to prevent layout thrashing
+            cachedScrubRect = tlScrubberContainer.getBoundingClientRect();
             handleScrub(e);
         });
 
