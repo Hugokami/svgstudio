@@ -5046,28 +5046,40 @@ ecpStrokeWidth.addEventListener('change', () => {
         // Scrubbing logic
         let isScrubbing = false;
         let scrubRAF = null;
-        function handleScrub(e) {
-            if (scrubRAF) return;
-            scrubRAF = requestAnimationFrame(() => {
-                const rect = tlScrubberContainer.getBoundingClientRect();
-                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-                let x = clientX - rect.left;
-                let progress = Math.max(0, Math.min(1, x / rect.width));
+        let scrubClientX = 0;
+        let cachedScrubberRect = null;
 
-                masterTimeline.progress(progress).pause();
-
-                const svg = svgTransformWrapper.querySelector('svg');
-                if (svg) {
-                    svg.pauseAnimations();
-                    svg.setCurrentTime(masterTimeline.time());
-                }
-                updateTimelineUI();
+        function updateScrub() {
+            if (!cachedScrubberRect) {
                 scrubRAF = null;
-            });
+                return;
+            }
+            let x = scrubClientX - cachedScrubberRect.left;
+            let progress = Math.max(0, Math.min(1, x / cachedScrubberRect.width));
+
+            masterTimeline.progress(progress).pause();
+
+            const svg = svgTransformWrapper.querySelector('svg');
+            if (svg) {
+                svg.pauseAnimations();
+                svg.setCurrentTime(masterTimeline.time());
+            }
+            updateTimelineUI();
+            scrubRAF = null;
+        }
+
+        function handleScrub(e) {
+            // ⚡ Bolt Optimization: Track coordinate externally to prevent dropping intermediate frames during rAF throttle
+            scrubClientX = e.clientX || (e.touches && e.touches[0].clientX);
+            if (!scrubRAF) {
+                scrubRAF = requestAnimationFrame(updateScrub);
+            }
         }
 
         tlScrubberContainer.addEventListener('mousedown', (e) => {
             isScrubbing = true;
+            // ⚡ Bolt Optimization: Cache bounding rect on mousedown to prevent layout thrashing during drag
+            cachedScrubberRect = tlScrubberContainer.getBoundingClientRect();
             handleScrub(e);
         });
 
@@ -5075,11 +5087,17 @@ ecpStrokeWidth.addEventListener('change', () => {
             if (isScrubbing) handleScrub(e);
         });
 
-        window.addEventListener('mouseup', () => {
-            isScrubbing = false;
-            if (scrubRAF) {
-                cancelAnimationFrame(scrubRAF);
-                scrubRAF = null;
+        window.addEventListener('mouseup', (e) => {
+            if (isScrubbing) {
+                isScrubbing = false;
+                if (scrubRAF) {
+                    cancelAnimationFrame(scrubRAF);
+                    scrubRAF = null;
+                }
+                // ⚡ Bolt Optimization: Apply final synchronous update on mouseup to prevent dropped frames
+                scrubClientX = e.clientX || (e.touches && e.touches[0].clientX);
+                updateScrub();
+                cachedScrubberRect = null;
             }
         });
 
