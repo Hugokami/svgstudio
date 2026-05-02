@@ -1,3 +1,6 @@
 ## 2024-05-24 - Unthrottled DOM reads during drag operations
 **Learning:** `svgviewer.html` is a large single-file application where layout thrashing is a primary performance bottleneck. Several drag operations (marquee selection, panning, scrubbing) were recalculating layout (e.g., `getBoundingClientRect`) or modifying DOM state inline during `mousemove` events without `requestAnimationFrame` throttling, causing unnecessary layout calculation on every frame.
 **Action:** When working with custom drag/drop or mousemove-driven interactions in this specific file, always implement `requestAnimationFrame` and ensure bounding rects are cached on `mousedown` rather than calculated on `mousemove`.
+## 2024-05-24 - Suboptimal DOM query for animation classes
+**Learning:** In `js/app.js` and `svgviewer.html`, locating elements with specific CSS class prefixes (`anim-`) was performed using `querySelectorAll('*')` followed by a JavaScript `Array.prototype.filter()`. This forces the browser to evaluate and pass every single DOM node to JavaScript, leading to massive overhead on large SVG documents.
+**Action:** When querying for elements by partial class name, always use CSS attribute selectors (e.g., `querySelectorAll('[class*="anim-"]')`) to perform the filtering natively in the browser engine, drastically reducing the number of nodes processed by JavaScript.
