@@ -1132,7 +1132,7 @@ const defaultSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200
             }
 
             const animations = Array.from(doc.querySelectorAll('animate, animateTransform, animateMotion'));
-            const cssAnims = Array.from(doc.querySelectorAll('*')).filter(el => {
+            const cssAnims = Array.from(doc.querySelectorAll('[class*="anim-"]')).filter(el => {
                 return Array.from(el.classList).some(cls => cls.startsWith('anim-'));
             });
 
@@ -4695,7 +4695,7 @@ ecpStrokeWidth.addEventListener('change', () => {
                 });
 
                 // 2. Remove all anim-* CSS classes from elements
-                svg.querySelectorAll('[class]').forEach(el => {
+                svg.querySelectorAll('[class*="anim-"]').forEach(el => {
                     const classes = Array.from(el.classList).filter(c => c.startsWith('anim-'));
                     classes.forEach(c => { el.classList.remove(c); removed++; });
                     el.style.animation = '';

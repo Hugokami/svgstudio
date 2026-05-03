@@ -1,3 +1,6 @@
 ## 2024-05-24 - Unthrottled DOM reads during drag operations
 **Learning:** `svgviewer.html` is a large single-file application where layout thrashing is a primary performance bottleneck. Several drag operations (marquee selection, panning, scrubbing) were recalculating layout (e.g., `getBoundingClientRect`) or modifying DOM state inline during `mousemove` events without `requestAnimationFrame` throttling, causing unnecessary layout calculation on every frame.
 **Action:** When working with custom drag/drop or mousemove-driven interactions in this specific file, always implement `requestAnimationFrame` and ensure bounding rects are cached on `mousedown` rather than calculated on `mousemove`.
+## 2024-06-25 - Avoid `querySelectorAll('*')` for targeted class filtering
+**Learning:** `querySelectorAll('*')` forces the browser to evaluate every node in the DOM. When we only need elements that have a certain prefix in their class (like `anim-`), it's significantly faster to use an attribute selector `[class*="anim-"]` instead. This reduces the number of nodes the browser has to traverse and the number of nodes Javascript then has to filter.
+**Action:** When querying for specific class prefixes, prefer `querySelectorAll('[class*="prefix-"]')` over `querySelectorAll('*')` followed by array filtering.
