@@ -1,3 +1,7 @@
 ## 2024-05-24 - Unthrottled DOM reads during drag operations
 **Learning:** `svgviewer.html` is a large single-file application where layout thrashing is a primary performance bottleneck. Several drag operations (marquee selection, panning, scrubbing) were recalculating layout (e.g., `getBoundingClientRect`) or modifying DOM state inline during `mousemove` events without `requestAnimationFrame` throttling, causing unnecessary layout calculation on every frame.
 **Action:** When working with custom drag/drop or mousemove-driven interactions in this specific file, always implement `requestAnimationFrame` and ensure bounding rects are cached on `mousedown` rather than calculated on `mousemove`.
+
+## 2024-05-24 - Avoid querySelectorAll('*') for class checks
+**Learning:** Using `querySelectorAll('*')` to find elements with specific class patterns (e.g., `startsWith('anim-')`) creates a massive performance bottleneck on large SVG documents, as it serializes every single node in the document into a JavaScript array before filtering.
+**Action:** When querying for elements by class patterns, always use an attribute selector like `querySelectorAll('[class*="anim-"]')` first. This pushes the initial filtering down to the highly optimized C++ native browser rendering engine, drastically reducing the size of the array returned to JavaScript and the number of elements that need to be manually filtered.
