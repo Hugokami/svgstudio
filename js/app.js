@@ -5346,9 +5346,12 @@ ecpStrokeWidth.addEventListener('change', () => {
             }
 
             if (newSelections.length > 0) {
+                // Bolt: Optimize selectedElements lookup from O(n*m) to O(n+m) using Set
+                const selectedSet = new Set(selectedElements);
                 newSelections.forEach(el => {
-                    if (!selectedElements.includes(el)) {
+                    if (!selectedSet.has(el)) {
                         selectedElements.push(el);
+                        selectedSet.add(el);
                         el.classList.add('el-selected');
                     }
                 });
