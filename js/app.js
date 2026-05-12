@@ -5346,8 +5346,11 @@ ecpStrokeWidth.addEventListener('change', () => {
             }
 
             if (newSelections.length > 0) {
+                // Bolt optimization: Use Set for O(1) membership checks instead of O(N) Array.includes
+                const selectedSet = new Set(selectedElements);
                 newSelections.forEach(el => {
-                    if (!selectedElements.includes(el)) {
+                    if (!selectedSet.has(el)) {
+                        selectedSet.add(el);
                         selectedElements.push(el);
                         el.classList.add('el-selected');
                     }
