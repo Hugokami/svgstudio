@@ -6621,17 +6621,21 @@
             const viewBox = svg.viewBox.baseVal || { x: 0, y: 0, width: 100, height: 100 };
             overlay.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`);
 
+            if (!createPathHandles._template) {
+                createPathHandles._template = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                createPathHandles._template.setAttribute('r', 2);
+                createPathHandles._template.setAttribute('stroke', '#000');
+                createPathHandles._template.setAttribute('stroke-width', 0.5);
+                createPathHandles._template.style.cursor = 'move';
+                createPathHandles._template.style.pointerEvents = 'auto';
+                createPathHandles._template.classList.add('path-handle');
+            }
+
             points.forEach((p, i) => {
-                const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+                const circle = createPathHandles._template.cloneNode(true);
                 circle.setAttribute('cx', p.x);
                 circle.setAttribute('cy', p.y);
-                circle.setAttribute('r', 2);
                 circle.setAttribute('fill', p.type.length > 1 ? '#00E5FF' : '#E5FF00'); // Light blue for controls
-                circle.setAttribute('stroke', '#000');
-                circle.setAttribute('stroke-width', 0.5);
-                circle.style.cursor = 'move';
-                circle.style.pointerEvents = 'auto';
-                circle.classList.add('path-handle');
                 circle.dataset.index = i;
 
                 overlay.appendChild(circle);
