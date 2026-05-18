@@ -3128,9 +3128,9 @@
             }
 
             const animations = Array.from(doc.querySelectorAll('animate, animateTransform, animateMotion'));
-            const cssAnims = Array.from(doc.querySelectorAll('*')).filter(el => {
-                return Array.from(el.classList).some(cls => cls.startsWith('anim-'));
-            });
+            // ⚡ Bolt: Replaced slow querySelectorAll('*') and classList filter with optimized exact prefix attribute selector.
+            // This prevents fetching every node and avoids C++ to JS array conversion overhead.
+            const cssAnims = Array.from(doc.querySelectorAll('[class^="anim-"], [class*=" anim-"]'));
 
             if (animations.length === 0 && cssAnims.length === 0) {
                 animList.innerHTML = '<div class="text-zinc-500 text-center py-8 text-sm">No animations found in this SVG.</div>';
